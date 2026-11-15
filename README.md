@@ -17,7 +17,7 @@ BLV's REAPER scripts, installed with [ReaPack](https://reapack.com).
 
 | Script | What it does | Platforms |
 |---|---|---|
-| BLV ReaLobby | A project launcher: find, inspect, organise and open your projects, and start new ones from templates. Run "BLV_ReaLobby" from the action list. | macOS (REAPER 7.74+, ReaImGui) |
+| BLV ReaLobby | A project launcher: find, inspect, organise and open your projects, and start new ones from templates. Run "BLV_ReaLobby" from the action list. | macOS and Windows (REAPER 7.74+, ReaImGui) |
 
 ## Licence
 
