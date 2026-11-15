@@ -143,13 +143,21 @@ end
 
 -- Shift: with FX offline; ⌘ (ImGui's Mod_Ctrl is Cmd on macOS; Windows
 -- untested): in a new tab.
-local function activate(ctx, state, r, templates)
+-- A double-click (by_mouse) asks first while "Ask before opening on
+-- double-click" is on (data.confirm_double_click, on unless false); Enter
+-- opens at once.
+local function activate(ctx, state, r, templates, by_mouse)
   if not r then return end
   local ImGui = theme.ImGui
   if templates then
     if state.use_template then state.use_template(r, state.view.value) end
   elseif state.open then
-    state.open(r, open_options.from_keys(ImGui.IsKeyDown(ctx, ImGui.Mod_Shift), ImGui.IsKeyDown(ctx, ImGui.Mod_Ctrl)))
+    local override = open_options.from_keys(ImGui.IsKeyDown(ctx, ImGui.Mod_Shift), ImGui.IsKeyDown(ctx, ImGui.Mod_Ctrl))
+    if by_mouse and state.confirm_open and not (state.data and state.data.confirm_double_click == false) then
+      state.confirm_open(r, override)
+    else
+      state.open(r, override)
+    end
   end
 end
 
@@ -236,7 +244,7 @@ function M.draw(ctx, state, list, w, h)
       end
       if hovered and ImGui.IsMouseDoubleClicked(ctx, ImGui.MouseButton_Left) then
         state.selected_key = r.key
-        activate(ctx, state, r, templates)
+        activate(ctx, state, r, templates, true)
       end
       draw_row(ctx, rdl, state, cols, pos, r, rx, top, rw, r.key == state.selected_key, hovered, templates, now)
     end

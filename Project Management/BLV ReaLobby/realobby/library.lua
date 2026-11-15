@@ -14,6 +14,10 @@
 -- (realobby/timelog.lua, keyed by normalize(song key)), or nil.
 -- SongView.cloud_only is true when the newest version is a cloud placeholder
 -- (platform list_dir): it is never read, since reading would download it.
+-- Scan folders are listed with ONE command each when P.list_tree exists
+-- (otherwise folder by folder). opts.cache is a table of parsed projects
+-- kept between runs (key: path, size and mtime); L:cache_table() returns the
+-- entries the last finished walk used, for saving.
 -- After changing pins, status, tags or hidden in data.songs, the UI must call
 -- L:touch() so the next songs() rebuilds the views. refresh() keeps the old
 -- result visible until the new walk completes.
@@ -66,7 +70,7 @@ function M.new(opts)
   end
 
   local L = {}
-  local cache = {}            -- path..size..mtime -> info
+  local cache = opts.cache or {}   -- path..size..mtime -> info (kept between runs)
   local files, shown, walking, dir_queue, parse_queue
   local dir_head, parse_head
   local parsed_since = 0
@@ -103,7 +107,11 @@ function M.new(opts)
     dir_head, parse_head = 1, 1
     for _, folder in ipairs(data.scan_folders or {}) do
       if not excluded(folder) then
-        dir_queue[#dir_queue + 1] = { dir = folder, depth = 0 }
+        if P.list_tree then
+          dir_queue[#dir_queue + 1] = { tree = folder }
+        else
+          dir_queue[#dir_queue + 1] = { dir = folder, depth = 0 }
+        end
       end
     end
     -- REAPER's recent list, then ReaLobby's known files (songs renamed,
@@ -127,7 +135,17 @@ function M.new(opts)
     end
   end
 
+  local SKIP_LIST = {}
+  for name in pairs(SKIP_DIRS) do SKIP_LIST[#SKIP_LIST + 1] = name end
+  table.sort(SKIP_LIST)
+
   local function do_dir(op)
+    if op.tree then
+      for _, e in ipairs(P.list_tree(op.tree, MAX_DEPTH, SKIP_LIST) or {}) do
+        add_file(e.path, e.size, e.mtime, e.cloud_only)
+      end
+      return
+    end
     local entries = P.list_dir(op.dir) or {}
     if op.recent then
       local present = {}
@@ -256,6 +274,16 @@ function M.new(opts)
     reset_views()
   end
 
+  -- The parsed projects the last finished walk used, by cache key.
+  function L:cache_table()
+    local out = {}
+    for path, f in pairs(shown or {}) do
+      local k = path .. "\0" .. tostring(f.size) .. "\0" .. tostring(f.mtime)
+      if cache[k] then out[k] = cache[k] end
+    end
+    return out
+  end
+
   function L:set_time(map)
     time_worked = map or {}
     reset_views()
@@ -319,7 +347,10 @@ function M.new(opts)
   end
 
   -- Lists each media folder at most once; never opens a media file.
-  function L:check_media(key)
+  -- list_dir (optional) lists a folder instead of P.list_dir (the details
+  -- pass a short-lived memo so a folder is listed once per selection).
+  function L:check_media(key, list_dir)
+    list_dir = list_dir or P.list_dir
     if groups_dirty then regroup() end
     for _, g in ipairs(groups) do
       if g.key == key then
@@ -329,7 +360,7 @@ function M.new(opts)
           local dir = dirname(path)
           if not listings[dir] then
             local set = {}
-            for _, e in ipairs(P.list_dir(dir) or {}) do set[e.name:lower()] = true end
+            for _, e in ipairs(list_dir(dir) or {}) do set[e.name:lower()] = true end
             listings[dir] = set
           end
           if not listings[dir][basename(path):lower()] then missing[#missing + 1] = path end

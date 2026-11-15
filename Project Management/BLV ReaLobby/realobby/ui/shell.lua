@@ -121,6 +121,23 @@ local function primary_button_width(ctx, label)
   return text_w(ctx, "ui_bold", theme.sizes.button, label) + 24
 end
 
+-- A square outlined button with an × drawn in it: closes ReaLobby.
+local function close_button(ctx, size)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local clicked = ImGui.InvisibleButton(ctx, "##close", size, size)
+  local hovered = ImGui.IsItemHovered(ctx)
+  local dl = ImGui.GetWindowDrawList(ctx)
+  local c = theme.colors
+  if hovered then ImGui.DrawList_AddRectFilled(dl, x, y, x + size, y + size, c.row_hover, 9) end
+  ImGui.DrawList_AddRect(dl, x + 0.5, y + 0.5, x + size - 0.5, y + size - 0.5, c.control_border, 9, 0, 1)
+  local m = size * 0.34
+  local col = hovered and c.ink or c.button2_text
+  ImGui.DrawList_AddLine(dl, x + m, y + m, x + size - m, y + size - m, col, 1.6)
+  ImGui.DrawList_AddLine(dl, x + size - m, y + m, x + m, y + size - m, col, 1.6)
+  if hovered then ImGui.SetTooltip(ctx, "Close ReaLobby (Esc)") end
+  return clicked
+end
+
 local function magnifier(dl, x, cy, color)
   ImGui.DrawList_AddCircle(dl, x + 7, cy - 1, 6, color, 0, 1.6)
   ImGui.DrawList_AddLine(dl, x + 11.5, cy + 3.5, x + 16, cy + 8, color, 1.6)
@@ -160,7 +177,11 @@ local function top_bar(ctx, state, x, y, w, appearing)
   -- Right side, laid out from the right edge.
   local label = "+ New from template"
   local btn_w = primary_button_width(ctx, label)
-  local right = x + w - L.pad_x
+  theme.push_font(ctx, "ui_bold", theme.sizes.button)
+  local close_size = ImGui.GetTextLineHeight(ctx) + 14
+  theme.pop_font(ctx)
+  local close_x = x + w - L.pad_x - close_size
+  local right = close_x - L.gap / 2
   local btn_x = right - btn_w
   local set_label = "Settings"
   local set_w = text_w(ctx, "ui_bold", theme.sizes.button, set_label) + 24
@@ -208,7 +229,12 @@ local function top_bar(ctx, state, x, y, w, appearing)
   theme.pop_font(ctx)
   if changed then state.query = q end
   state.search_active = ImGui.IsItemActive(ctx)
-  if ImGui.IsItemHovered(ctx, ImGui.HoveredFlags_DelayNormal or 0) then ImGui.SetTooltip(ctx, shell.FILTER_HELP) end
+  -- The filter help: only over an empty search box you are not typing in,
+  -- so it never covers the list while you search.
+  if (state.query or "") == "" and not state.search_active
+      and ImGui.IsItemHovered(ctx, ImGui.HoveredFlags_DelayNormal or 0) then
+    ImGui.SetTooltip(ctx, shell.FILTER_HELP)
+  end
 
   -- Button.
   theme.push_font(ctx, "ui_bold", theme.sizes.button)
@@ -218,6 +244,8 @@ local function top_bar(ctx, state, x, y, w, appearing)
   if primary_button(ctx, label) then state.dialog = "new_from_template" end
   ImGui.SetCursorScreenPos(ctx, set_x, cy - bh / 2)
   if secondary_button(ctx, set_label) then state.dialog = "settings" end
+  ImGui.SetCursorScreenPos(ctx, close_x, cy - bh / 2)
+  if close_button(ctx, bh) then state.close_requested = true end
 
   ImGui.DrawList_AddLine(dl, x, y + h - 0.5, x + w, y + h - 0.5, c.line, 1)
 end

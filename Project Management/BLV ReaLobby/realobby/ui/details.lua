@@ -47,9 +47,9 @@ function M.lists(state, song, now)
       checked = loaded.key == song.key and loaded.checked }
   end
   if loaded.ready or now - loaded.since < M.SETTLE then return loaded end
-  if not loaded.checked and state.library then state.library:check_media(song.key) end
+  local P = M.view_P(state)
+  if not loaded.checked and state.library then state.library:check_media(song.key, P and P.list_dir) end
   loaded.checked = true
-  local P = state.P
   if P then
     local extra = state.data and state.data.bounce_folders or nil
     loaded.bounces = bounces.list(song.info or {}, song.newest, P, extra)
@@ -86,7 +86,9 @@ local function cleanup_step(state, song, clock)
   if not loaded.ready or loaded.cleanup or not state.P or M.library_partial(state) then return end
   if not loaded.cleanup_co then
     loaded.cleanup_co = coroutine.create(function()
-      return cleanup.scan(song, M.cleanup_ctx(state, coroutine.yield))
+      local ctx = M.cleanup_ctx(state, coroutine.yield)
+      ctx.P = M.view_P(state) or ctx.P
+      return cleanup.scan(song, ctx)
     end)
   end
   local started = clock()
@@ -135,6 +137,31 @@ end
 -- Forget the loaded lists (the next draw lists them again).
 function M.reset()
   loaded = {}
+  M.forget_listings()
+end
+
+-- Folder listings for the details, kept M.LISTING_TTL seconds: the song's
+-- folder serves the bounces, the backups, the media check and the
+-- unused-audio check, and going back to a song lists nothing again. Changes
+-- (rename, clean-up) always list afresh through state.P.
+M.LISTING_TTL = 10
+local listings = {}
+function M.forget_listings() listings = {} end
+
+function M.view_P(state)
+  local P = state.P
+  if not P then return nil end
+  local clock = state.clock or os.clock
+  local V = setmetatable({}, { __index = P })
+  function V.list_dir(dir)
+    local now = clock()
+    local hit = listings[dir]
+    if hit and now - hit.t < M.LISTING_TTL then return hit.entries end
+    local entries = P.list_dir(dir) or {}
+    listings[dir] = { t = now, entries = entries }
+    return entries
+  end
+  return V
 end
 
 -- Buttons ---------------------------------------------------------------------

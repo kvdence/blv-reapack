@@ -20,7 +20,7 @@ local cleanup = require("realobby.cleanup")
 local M = {}
 
 local POPUP = "##realobby_dialog"
-local WIDTH = { confirm = 640, settings = 660, first_run = 600, new_from_template = 600, cleanup = 640 }
+local WIDTH = { open_confirm = 460, confirm = 640, settings = 720, first_run = 600, new_from_template = 600, cleanup = 640 }
 local DEFAULT_W = 560
 
 local COUNT_BUDGET = 0.008   -- seconds of folder listings per frame for the browsers' counts
@@ -51,6 +51,7 @@ end
 function M.new_from_template(state) open(state, "new_from_template") end
 function M.settings(state) open(state, "settings") end
 function M.cleanup(state, song) open(state, "cleanup", { song = song }) end
+function M.open_confirm(state, song, override) open(state, "open_confirm", { song = song, override = override }) end
 function M.first_run(state) open(state, "first_run") end
 
 local function close(state)
@@ -342,6 +343,28 @@ local function confirm_body(ctx, state, args)
     else
       d.error, d.failed = msg, true
     end
+  end
+end
+
+-- Open after a double-click -----------------------------------------------------
+
+local function open_confirm_body(ctx, state, args)
+  local song, o = args.song, args.override or {}
+  heading(ctx, "Open " .. (song.display_title or format.file_name(song.newest)) .. "?")
+  local how = {}
+  if o.fx_offline then how[#how + 1] = "with FX offline" end
+  if o.new_tab then how[#how + 1] = "in a new tab" end
+  local line = format.file_name(song.newest)
+  if (song.display_author or "") ~= "" then line = song.display_author .. " · " .. line end
+  if #how > 0 then line = line .. " · " .. table.concat(how, ", ") end
+  box(ctx, line, "faint")
+  local enter = ImGui.IsKeyPressed(ctx, ImGui.Key_Enter, false) or ImGui.IsKeyPressed(ctx, ImGui.Key_KeypadEnter, false)
+  local hit = buttons(ctx, { { "Cancel", false }, { "Open", true } })
+  if hit == 1 then
+    close(state)
+  elseif hit == 2 or enter then
+    close(state)
+    if state.open then state.open(song, args.override) end
   end
 end
 
@@ -684,43 +707,287 @@ local function checkbox(ctx, label, value)
   return changed, v
 end
 
-local function settings_body(ctx, state)
-  heading(ctx, "Settings")
-  ImGui.PushStyleVar(ctx, ImGui.StyleVar_WindowPadding, 0, 0)
-  local visible = ImGui.BeginChild(ctx, "##settings_scroll", avail_w(ctx), 470, ImGui.ChildFlags_None)
-  ImGui.PopStyleVar(ctx)
-  if visible then
-    ImGui.PushItemWidth(ctx, -1)
-    section(ctx, "Scan folders")
-    box(ctx, A.SCAN_NOTE, "faint")
-    folder_list(ctx, state, "scan_folders")
-    section(ctx, "Excluded folders")
-    folder_list(ctx, state, "excludes")
-    section(ctx, "Bounce folders")
-    folder_list(ctx, state, "bounce_folders")
-    box(ctx, A.CHOOSE_NOTE, "faint")
-    section(ctx, "Statuses")
-    statuses(ctx, state)
-    section(ctx, "Glass")
-    local pct = math.floor((state.opacity or theme.OPACITY) * 100 + 0.5)
-    ImGui.SetNextItemWidth(ctx, avail_w(ctx))
-    local ch, v = ImGui.SliderInt(ctx, "##opacity", pct, 80, 100, "Opacity %d %%")
-    if ch then A.opacity(state.env, v) end
-    section(ctx, "Startup")
-    local sch, on = checkbox(ctx, "Run ReaLobby when REAPER starts", state.startup_on)
+-- Settings: tabs across the top; Overview shows four summary cards, each
+-- other tab one topic in a label column + controls layout.
+
+local SETTINGS_TABS = { "Overview", "Folders", "Statuses", "Look", "Behaviour" }
+local SETTINGS_H = 440   -- the scrolling page area
+
+-- An on/off pill; returns changed, value.
+local function switch(ctx, id, on)
+  local c = theme.colors
+  local h = ImGui.GetFrameHeight(ctx) - 4
+  local w = h * 1.8
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local clicked = ImGui.InvisibleButton(ctx, id, w, h)
+  local dl = ImGui.GetWindowDrawList(ctx)
+  ImGui.DrawList_AddRectFilled(dl, x, y, x + w, y + h, on and c.teal or c.control_border, h / 2)
+  local r = h / 2 - 2
+  local cx = on and (x + w - r - 2) or (x + r + 2)
+  ImGui.DrawList_AddCircleFilled(dl, cx, y + h / 2, r, on and c.button_text or c.ink)
+  if ImGui.IsItemHovered(ctx) then ImGui.SetMouseCursor(ctx, ImGui.MouseCursor_Hand) end
+  if clicked then return true, not on end
+  return false, on
+end
+
+-- A label on the left and a switch on the right, full width.
+local function switch_row(ctx, id, label, on)
+  local w = avail_w(ctx)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local fh = ImGui.GetFrameHeight(ctx)
+  local _, th = draw.measure(ctx, "ui", theme.sizes.small + 1, "A")
+  draw.text(ImGui.GetWindowDrawList(ctx), "ui", theme.sizes.small + 1, x, y + (fh - th) / 2, theme.colors.cell, label)
+  local sw = (fh - 4) * 1.8
+  ImGui.SetCursorScreenPos(ctx, x + w - sw, y + 2)
+  local ch, v = switch(ctx, id, on)
+  ImGui.SetCursorScreenPos(ctx, x, y + fh + 6)
+  ImGui.Dummy(ctx, 0, 0)
+  return ch, v
+end
+
+-- The tab bar; returns the chosen tab.
+local function tab_bar(ctx, current)
+  local c = theme.colors
+  local dl = ImGui.GetWindowDrawList(ctx)
+  local x0, y0 = ImGui.GetCursorScreenPos(ctx)
+  local w = avail_w(ctx)
+  local x = x0
+  local _, th = draw.measure(ctx, "ui_bold", theme.sizes.small + 1, "A")
+  local h = th + 18
+  local chosen = current
+  for i, name in ipairs(SETTINGS_TABS) do
+    local tw = draw.measure(ctx, "ui_bold", theme.sizes.small + 1, name)
+    ImGui.SetCursorScreenPos(ctx, x, y0)
+    if ImGui.InvisibleButton(ctx, "##tab" .. i, tw + 20, h) then chosen = i end
+    local hovered = ImGui.IsItemHovered(ctx)
+    local on = i == current
+    draw.text(dl, "ui_bold", theme.sizes.small + 1, x + 10, y0 + 8,
+      on and c.nav_on or (hovered and c.cell or c.sub), name)
+    if on then ImGui.DrawList_AddRectFilled(dl, x + 8, y0 + h - 2, x + tw + 12, y0 + h, c.teal, 1) end
+    x = x + tw + 22
+  end
+  ImGui.DrawList_AddLine(dl, x0, y0 + h - 0.5, x0 + w, y0 + h - 0.5, c.line, 1)
+  ImGui.SetCursorScreenPos(ctx, x0, y0 + h + 12)
+  ImGui.Dummy(ctx, 0, 0)
+  return chosen
+end
+
+-- A rounded card of width w; body(ctx) draws inside. Returns true when its
+-- "Edit" link was clicked.
+local function card(ctx, id, w, h, title, edit, body)
+  local c = theme.colors
+  ImGui.PushStyleColor(ctx, ImGui.Col_ChildBg, c.tile)
+  ImGui.PushStyleColor(ctx, ImGui.Col_Border, c.line)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_ChildRounding, 12)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_WindowPadding, 14, 12)
+  local clicked = false
+  if ImGui.BeginChild(ctx, id, w, h, (ImGui.ChildFlags_Borders or ImGui.ChildFlags_Border) | ImGui.ChildFlags_AlwaysUseWindowPadding,
+      ImGui.WindowFlags_NoScrollbar) then
+    local x, y = ImGui.GetCursorScreenPos(ctx)
+    local cw = avail_w(ctx)
+    local dl = ImGui.GetWindowDrawList(ctx)
+    local _, th = draw.measure(ctx, "ui_bold", theme.sizes.small + 2, "A")
+    draw.text(dl, "ui_bold", theme.sizes.small + 2, x, y, c.ink, title)
+    if edit then
+      local ew = draw.measure(ctx, "ui_bold", theme.sizes.small, edit)
+      ImGui.SetCursorScreenPos(ctx, x + cw - ew, y)
+      clicked = ImGui.InvisibleButton(ctx, "##edit", ew, th)
+      local hov = ImGui.IsItemHovered(ctx)
+      if hov then ImGui.SetMouseCursor(ctx, ImGui.MouseCursor_Hand) end
+      draw.text(dl, "ui_bold", theme.sizes.small, x + cw - ew, y + 1, hov and c.ink or c.teal, edit)
+    end
+    ImGui.SetCursorScreenPos(ctx, x, y + th + 10)
+    ImGui.Dummy(ctx, 0, 0)
+    body(ctx)
+    ImGui.EndChild(ctx)
+  end
+  ImGui.PopStyleVar(ctx, 2)
+  ImGui.PopStyleColor(ctx, 2)
+  return clicked
+end
+
+-- A "label ... value" line inside a card.
+local function stat_line(ctx, label, value)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local w = avail_w(ctx)
+  local dl = ImGui.GetWindowDrawList(ctx)
+  local size = theme.sizes.small
+  local _, th = draw.measure(ctx, "ui", size, "A")
+  draw.text(dl, "ui", size, x, y, theme.colors.cell, label)
+  local vw = draw.measure(ctx, "ui", size, value)
+  draw.text(dl, "ui", size, x + w - vw, y, theme.colors.sub, value)
+  ImGui.Dummy(ctx, w, th + 8)
+end
+
+-- A page row: the label (and a note under it) on the left, controls on the right.
+local function page_row(ctx, id, label, note, body)
+  local LW = 170
+  ImGui.PushID(ctx, id)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local dl = ImGui.GetWindowDrawList(ctx)
+  draw.text(dl, "ui_bold", theme.sizes.small + 1, x, y + 4, theme.colors.ink, label)
+  local lines = note and draw.wrap(ctx, "ui", theme.sizes.small, note, LW - 16, 20) or {}
+  local _, lh = draw.measure(ctx, "ui", theme.sizes.small, "A")
+  for i, line in ipairs(lines) do
+    draw.text(dl, "ui", theme.sizes.small, x, y + 24 + (i - 1) * (lh + 2), theme.colors.sub, line)
+  end
+  local left_h = 24 + #lines * (lh + 2)
+  ImGui.SetCursorScreenPos(ctx, x + LW, y)
+  ImGui.BeginGroup(ctx)
+  ImGui.PushItemWidth(ctx, avail_w(ctx))
+  body(ctx)
+  ImGui.PopItemWidth(ctx)
+  ImGui.EndGroup(ctx)
+  local _, gy2 = ImGui.GetItemRectMax(ctx)
+  local bottom = math.max(gy2, y + left_h)
+  ImGui.SetCursorScreenPos(ctx, x, bottom + 18)
+  ImGui.Dummy(ctx, 0, 0)
+  ImGui.PopID(ctx)
+end
+
+-- The opacity slider, with a visible track and a teal grab.
+local function opacity_slider(ctx, state)
+  local pct = math.floor((state.opacity or theme.OPACITY) * 100 + 0.5)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBg, theme.colors.control_border)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgHovered, theme.colors.checkbox_border)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgActive, theme.colors.checkbox_border)
+  ImGui.PushStyleColor(ctx, ImGui.Col_SliderGrab, theme.colors.teal)
+  ImGui.PushStyleColor(ctx, ImGui.Col_SliderGrabActive, theme.colors.teal)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, 7)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_GrabRounding, 6)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_GrabMinSize, 14)
+  ImGui.SetNextItemWidth(ctx, avail_w(ctx))
+  local changed, v = ImGui.SliderInt(ctx, "##opacity", pct, 80, 100, "%d %%")
+  ImGui.PopStyleVar(ctx, 3)
+  ImGui.PopStyleColor(ctx, 5)
+  if changed then A.opacity(state.env, v) end
+end
+
+local function overview_page(ctx, state)
+  local data = state.data
+  local gap = 12
+  local cw = (avail_w(ctx) - gap) / 2
+  local ch = (SETTINGS_H - gap - 4) / 2
+  local songs = state.library and #state.library:songs({ include_hidden = true }) or 0
+  if card(ctx, "##c_folders", cw, ch, "Folders", "Edit", function(c)
+    stat_line(c, "Scan folders", format.count(#(data.scan_folders or {}), "folder") .. " · " .. format.count(songs, "song"))
+    stat_line(c, "Excluded", tostring(#(data.excludes or {})))
+    stat_line(c, "Extra bounce folders", #(data.bounce_folders or {}) == 0 and "none" or tostring(#data.bounce_folders))
+  end) then d.tab = 2 end
+  ImGui.SameLine(ctx, 0, gap)
+  if card(ctx, "##c_status", cw, ch, "Statuses", "Edit", function(c)
+    local dl = ImGui.GetWindowDrawList(c)
+    local x0, y = ImGui.GetCursorScreenPos(c)
+    local x, w = x0, avail_w(c)
+    local _, th = draw.measure(c, "ui", theme.sizes.small, "A")
+    for _, name in ipairs(data.statuses or {}) do
+      local tw = draw.measure(c, "ui", theme.sizes.small, name) + 28
+      if x + tw > x0 + w then x, y = x0, y + th + 14 end
+      ImGui.DrawList_AddRectFilled(dl, x, y, x + tw, y + th + 8, theme.colors.tile, 7)
+      ImGui.DrawList_AddCircleFilled(dl, x + 11, y + (th + 8) / 2, 4, theme.status_color(name, data.statuses, data.status_builtin))
+      draw.text(dl, "ui", theme.sizes.small, x + 20, y + 4, theme.colors.cell, name)
+      x = x + tw + 6
+    end
+    ImGui.Dummy(c, w, y - select(2, ImGui.GetCursorScreenPos(c)) + th + 8)
+  end) then d.tab = 3 end
+  if card(ctx, "##c_look", cw, ch, "Look", nil, function(c)
+    local _, th = draw.measure(c, "ui", theme.sizes.small, "A")
+    local x, y = ImGui.GetCursorScreenPos(c)
+    draw.text(ImGui.GetWindowDrawList(c), "ui", theme.sizes.small, x, y, theme.colors.sub, "Glass opacity")
+    ImGui.Dummy(c, 0, th + 6)
+    opacity_slider(c, state)
+  end) then end
+  ImGui.SameLine(ctx, 0, gap)
+  if card(ctx, "##c_behaviour", cw, ch, "Behaviour", "More", function(c)
+    local sch, on = switch_row(c, "##sw_start", "Open when REAPER starts", state.startup_on)
     if sch then
       local ok, err = A.set_startup(state.env, on)
       d.start_err = (not ok) and err or nil
     end
-    error_box(ctx, d.start_err)
-    section(ctx, "Time worked")
-    local tch, ton = checkbox(ctx, "Count time worked on each song", state.data.count_time ~= false)
+    local cch, con = switch_row(c, "##sw_confirm", "Ask before double-click opens", data.confirm_double_click ~= false)
+    if cch then A.set_confirm_double_click(state.env, con) end
+    local tch, ton = switch_row(c, "##sw_time", "Count time worked", data.count_time ~= false)
     if tch then A.set_count_time(state.env, ton) end
-    box(ctx, A.TIME_NOTE, "faint")
-    ImGui.PopItemWidth(ctx)
+  end) then d.tab = 5 end
+  error_box(ctx, d.start_err)
+end
+
+local function folders_page(ctx, state)
+  page_row(ctx, "scan", "Scan folders", "ReaLobby looks inside every subfolder too.", function(c)
+    folder_list(c, state, "scan_folders")
+  end)
+  page_row(ctx, "excl", "Excluded", "Hidden from every list.", function(c)
+    folder_list(c, state, "excludes")
+  end)
+  page_row(ctx, "bounce", "Extra bounce folders", "Each project's own render folder is found already.", function(c)
+    folder_list(c, state, "bounce_folders")
+  end)
+  box(ctx, A.CHOOSE_NOTE, "faint")
+end
+
+local function statuses_page(ctx, state)
+  page_row(ctx, "st", "Statuses", "Your song stages, in order. Rename one by editing its name.", function(c)
+    statuses(c, state)
+  end)
+end
+
+local function look_page(ctx, state)
+  page_row(ctx, "op", "Glass opacity", "How much of REAPER shows through the window.", function(c)
+    opacity_slider(c, state)
+  end)
+end
+
+local function behaviour_page(ctx, state)
+  page_row(ctx, "start", "Startup", "ReaLobby opens by itself each time REAPER starts.", function(c)
+    local sch, on = switch_row(c, "##sw_start", "Open when REAPER starts", state.startup_on)
+    if sch then
+      local ok, err = A.set_startup(state.env, on)
+      d.start_err = (not ok) and err or nil
+    end
+    error_box(c, d.start_err)
+  end)
+  page_row(ctx, "confirm", "Opening", "A double-click on a song asks before it opens. Enter always opens at once.", function(c)
+    local cch, con = switch_row(c, "##sw_confirm", "Ask before double-click opens a song", state.data.confirm_double_click ~= false)
+    if cch then A.set_confirm_double_click(state.env, con) end
+  end)
+  page_row(ctx, "time", "Time worked", A.TIME_NOTE, function(c)
+    local tch, ton = switch_row(c, "##sw_time", "Count time worked on each song", state.data.count_time ~= false)
+    if tch then A.set_count_time(state.env, ton) end
+  end)
+end
+
+local PAGES = { overview_page, folders_page, statuses_page, look_page, behaviour_page }
+
+local function settings_body(ctx, state)
+  d.tab = d.tab or 1
+  -- Header: title, and a close × on the right.
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local w = avail_w(ctx)
+  local dl = ImGui.GetWindowDrawList(ctx)
+  local _, th = draw.measure(ctx, "ui_bold", 16, "A")
+  draw.text(dl, "ui_bold", 16, x, y, theme.colors.ink, "Settings")
+  local size = th + 8
+  ImGui.SetCursorScreenPos(ctx, x + w - size, y - 4)
+  local closed = ImGui.InvisibleButton(ctx, "##settings_close", size, size)
+  local hov = ImGui.IsItemHovered(ctx)
+  local bx, by = x + w - size, y - 4
+  if hov then ImGui.DrawList_AddRectFilled(dl, bx, by, bx + size, by + size, theme.colors.row_hover, 7) end
+  ImGui.DrawList_AddRect(dl, bx + 0.5, by + 0.5, bx + size - 0.5, by + size - 0.5, theme.colors.control_border, 7, 0, 1)
+  local m = size * 0.34
+  ImGui.DrawList_AddLine(dl, bx + m, by + m, bx + size - m, by + size - m, theme.colors.sub, 1.5)
+  ImGui.DrawList_AddLine(dl, bx + size - m, by + m, bx + m, by + size - m, theme.colors.sub, 1.5)
+  ImGui.SetCursorScreenPos(ctx, x, y + th + 12)
+  ImGui.Dummy(ctx, 0, 0)
+
+  d.tab = tab_bar(ctx, d.tab)
+  ImGui.PushStyleVar(ctx, ImGui.StyleVar_WindowPadding, 0, 0)
+  local visible = ImGui.BeginChild(ctx, "##settings_page", avail_w(ctx), SETTINGS_H, ImGui.ChildFlags_None)
+  ImGui.PopStyleVar(ctx)
+  if visible then
+    PAGES[d.tab](ctx, state)
     ImGui.EndChild(ctx)
   end
-  if buttons(ctx, { { "Close", true } }) then close(state) end
+  if closed or buttons(ctx, { { "Done", true } }) then close(state) end
 end
 
 local function first_run_body(ctx, state)
@@ -744,7 +1011,7 @@ end
 local BODIES = {
   confirm = confirm_body, rename = rename_body, move = move_body, edit_notes = notes_body,
   edit_fields = fields_body, new_from_template = new_body, settings = settings_body, first_run = first_run_body,
-  cleanup = cleanup_body,
+  cleanup = cleanup_body, open_confirm = open_confirm_body,
 }
 
 -- Drawing -----------------------------------------------------------------------

@@ -68,17 +68,8 @@ function M.new(os_name, run)
     return p
   end
 
-  function P.list_dir(dir)
-    local cmd
-    if os_name == "mac" then
-      cmd = "find -H " .. posix_quote(dir) .. " -mindepth 1 -maxdepth 1 -exec stat -f '%HT|%z|%m|%Xf|%N' {} + 2>/dev/null"
-    elseif os_name == "linux" then
-      cmd = "find -H " .. posix_quote(dir) .. " -mindepth 1 -maxdepth 1 -exec stat -c '%F|%s|%Y|0|%n' {} + 2>/dev/null"
-    else
-      cmd = ps_cmd("Get-ChildItem -LiteralPath " .. ps_quote(dir) .. " -Force | ForEach-Object { '{0}|{1}|{2}|{3}|{4}' -f "
-        .. "$_.PSIsContainer,$_.Length,[DateTimeOffset]::new($_.LastWriteTimeUtc).ToUnixTimeSeconds(),[int]$_.Attributes,$_.FullName }")
-    end
-    local out = run(cmd) or ""
+  -- Lines "kind|size|mtime|flags|path" (the commands below) as entries.
+  local function parse(out)
     local entries = {}
     for line in (out .. "\n"):gmatch("(.-)\r?\n") do
       local kind, size, mtime, flags, path = line:match("^([^|]*)|([^|]*)|([^|]*)|([^|]*)|(.+)$")
@@ -104,6 +95,59 @@ function M.new(os_name, run)
       end
     end
     return entries
+  end
+
+  local PS_LINE = "'{0}|{1}|{2}|{3}|{4}' -f $_.PSIsContainer,$_.Length,"
+    .. "[DateTimeOffset]::new($_.LastWriteTimeUtc).ToUnixTimeSeconds(),[int]$_.Attributes,$_.FullName"
+
+  function P.list_dir(dir)
+    local cmd
+    if os_name == "mac" then
+      cmd = "find -H " .. posix_quote(dir) .. " -mindepth 1 -maxdepth 1 -exec stat -f '%HT|%z|%m|%Xf|%N' {} + 2>/dev/null"
+    elseif os_name == "linux" then
+      cmd = "find -H " .. posix_quote(dir) .. " -mindepth 1 -maxdepth 1 -exec stat -c '%F|%s|%Y|0|%n' {} + 2>/dev/null"
+    else
+      cmd = ps_cmd("Get-ChildItem -LiteralPath " .. ps_quote(dir) .. " -Force | ForEach-Object { " .. PS_LINE .. " }")
+    end
+    return parse(run(cmd) or "")
+  end
+
+  -- Every REAPER project file under root, at most max_depth folders down,
+  -- in ONE command (a folder-by-folder walk costs a command per folder).
+  -- Folders named in skip (lower case) and hidden folders are not entered on
+  -- macOS and Linux; on Windows they are filtered out afterwards. Entries as
+  -- list_dir gives them.
+  function P.list_tree(root, max_depth, skip)
+    local cmd
+    if os_name == "mac" or os_name == "linux" then
+      local prune = { "-name '.*'" }
+      for _, name in ipairs(skip or {}) do prune[#prune + 1] = "-iname " .. posix_quote(name) end
+      local fmt = os_name == "mac" and "stat -f '%HT|%z|%m|%Xf|%N'" or "stat -c '%F|%s|%Y|0|%n'"
+      cmd = "find -H " .. posix_quote(root) .. " -mindepth 1 -maxdepth " .. (max_depth + 1)
+        .. " \\( -type d \\( " .. table.concat(prune, " -o ") .. " \\) -prune \\) -o"
+        .. " \\( -type f -iname '*.rpp' -exec " .. fmt .. " {} + \\) 2>/dev/null"
+    else
+      cmd = ps_cmd("Get-ChildItem -LiteralPath " .. ps_quote(root) .. " -Recurse -Depth " .. max_depth
+        .. " -Filter *.rpp -File -Force -ErrorAction SilentlyContinue | ForEach-Object { " .. PS_LINE .. " }")
+    end
+    local entries = parse(run(cmd) or "")
+    local out = {}
+    local base = norm(root):gsub("[/\\]+$", "")
+    local blocked = {}
+    for _, name in ipairs(skip or {}) do blocked[name:lower()] = true end
+    for _, e in ipairs(entries) do
+      if not e.is_dir and e.name:lower():match("%.rpp$") then
+        local rel = e.path:sub(#base + 2)
+        local ok = true
+        local parts = {}
+        for part in rel:gmatch("[^/\\]+") do parts[#parts + 1] = part end
+        for i = 1, #parts - 1 do
+          if parts[i]:sub(1, 1) == "." or blocked[parts[i]:lower()] then ok = false end
+        end
+        if ok then out[#out + 1] = e end
+      end
+    end
+    return out
   end
 
   -- Runs cmd, appends a success marker; returns true or false, output.

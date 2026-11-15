@@ -1,6 +1,6 @@
 -- @description BLV ReaLobby
 -- @author BLV
--- @version 0.1.2
+-- @version 0.1.3
 -- @about A project launcher for REAPER. Requires REAPER 7.74 or newer and ReaImGui. macOS and Windows.
 --   Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.
 -- @provides
@@ -108,8 +108,13 @@ local function load_time(L)
 end
 
 local recent = B.recent()
+-- Projects read on earlier runs (path, size and mtime unchanged) are not
+-- read again: the walk takes them from this cache.
+local cache_path = P.join(data_dir, "cache.dat")
+local cached = store.read(cache_path)
 local L = library.new({ P = P, recent = recent, normalize = B.normalize, data = data, read = rpp.read, budget = 8,
-  clock = reaper.time_precise })
+  clock = reaper.time_precise,
+  cache = type(cached) == "table" and cached.version == 1 and type(cached.entries) == "table" and cached.entries or nil })
 L:set_installed_fx(B.installed_fx())
 load_time(L)
 
@@ -172,6 +177,9 @@ state.env = {
   start_timer = function() return B.start_timer(timer_path) end,
   stop_timer = B.stop_timer,
 }
+
+-- A double-click asks before opening (Settings → Behaviour).
+function state.confirm_open(song, override) dialogs.open_confirm(state, song, override) end
 
 -- The unused-audio clean-up for a song (the details' tile, the song menu).
 function state.cleanup(song) dialogs.cleanup(state, song) end
@@ -390,6 +398,10 @@ local function close()
   closed = true
   if sync() then saver_:mark() end
   saver_:flush()
+  -- Keep what this run read for the next start (only after a full walk).
+  if not state.scanning then
+    pcall(store.save, cache_path, { version = 1, entries = L:cache_table() })
+  end
   single:release()
 end
 

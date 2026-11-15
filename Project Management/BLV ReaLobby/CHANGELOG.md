@@ -1,5 +1,13 @@
 # BLV ReaLobby changelog
 
+## 0.1.3 (2026-11-15)
+
+- Double-clicking a song now asks "Open …?" first (Enter or Open confirms). Switch it off in Settings → Behaviour. Enter in the list still opens at once.
+- Much faster: each scan folder is read in one go, and projects already read are remembered between starts. In a test with 150 songs, the first scan dropped from about 12 seconds to about 2, and later starts take about a fifth of a second.
+- Going back to a song shows its bounces, backups and checks at once (folder listings are reused for a few seconds).
+- A close button (×) at the top right closes ReaLobby and leaves you in the empty project. Esc still does the same.
+- Settings redesigned: tabs across the top (Overview, Folders, Statuses, Look, Behaviour). Overview shows four cards with the main facts and switches; each Edit link opens its tab. On/off choices are switches, and the window has its own close button.
+
 ## 0.1.2 (2026-11-15)
 
 Now for Windows too (checked on Windows 11 with REAPER 7.82 and ReaImGui 0.10.0.5), as well as macOS.

@@ -337,6 +337,12 @@ end
 
 -- Pins, status, hidden --------------------------------------------------------
 
+-- "Ask before opening on double-click" (data.confirm_double_click, on unless false).
+function A.set_confirm_double_click(env, on)
+  env.data.confirm_double_click = on and true or false
+  mark(env)
+end
+
 -- "Count time worked on each song" (data.count_time, on unless false).
 function A.set_count_time(env, on)
   env.data.count_time = on and true or false
