@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<index version="1" name="BLV" commit="dd5e56b4e221e1bdc4ad21c665edd171c6031085">
+<index version="1" name="BLV" commit="6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263">
   <metadata>
     <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
 BLV scripts for REAPER. All rights reserved, free to use.\par
@@ -84,6 +84,300 @@ A project launcher for REAPER: find, inspect, organise and open your projects, a
         <source platform="windows" hash="122000a31a1bb52cf184146d618ef9004e3481953aa1910ea70cce85094696cf2bca" file="realobby/ui/sidebar.lua">https://github.com/kvdence/blv-reapack/raw/dd5e56b4e221e1bdc4ad21c665edd171c6031085/Project%20Management/BLV%20ReaLobby/realobby/ui/sidebar.lua</source>
         <source platform="windows" hash="1220079975e83554496db7ed642574b896b2153cdb1dbc95d8c0227272f7cd2789e5" file="realobby/ui/table.lua">https://github.com/kvdence/blv-reapack/raw/dd5e56b4e221e1bdc4ad21c665edd171c6031085/Project%20Management/BLV%20ReaLobby/realobby/ui/table.lua</source>
         <source platform="windows" hash="1220a9d7fc9795efe8e7528dc2636d91b336b62e5be9544dae8c494d261080a46155" file="realobby/ui/theme.lua">https://github.com/kvdence/blv-reapack/raw/dd5e56b4e221e1bdc4ad21c665edd171c6031085/Project%20Management/BLV%20ReaLobby/realobby/ui/theme.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <category name="Tracks">
+    <reapack name="BLV_Alphabetize selected tracks.lua" type="script" desc="BLV Alphabetize selected tracks">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Sorts the selected tracks A to Z by name. Selected folders move as whole blocks and the folder structure is kept. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12204113f875a658c69d2dd6fdf8df3997d8623881bb6023c844c167be2df145892f">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Alphabetize%20selected%20tracks.lua</source>
+        <source platform="windows" main="main" hash="12204113f875a658c69d2dd6fdf8df3997d8623881bb6023c844c167be2df145892f">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Alphabetize%20selected%20tracks.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Prefix selected tracks with parent name (skip BUS).lua" type="script" desc="BLV Prefix selected tracks with parent name (skip BUS)">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Puts each selected track's parent folder name in front of its name; "BUS" is left out of the parent name and BUS tracks are skipped. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12206e8aec6fd81e3cfef41482d095857d9ebf2a314abf423e6b0d5bcb7d4abd3f19">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Prefix%20selected%20tracks%20with%20parent%20name%20%28skip%20BUS%29.lua</source>
+        <source platform="windows" main="main" hash="12206e8aec6fd81e3cfef41482d095857d9ebf2a314abf423e6b0d5bcb7d4abd3f19">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Prefix%20selected%20tracks%20with%20parent%20name%20%28skip%20BUS%29.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Prefix tracks with parent name.lua" type="script" desc="BLV Prefix tracks with parent name">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Puts each track's parent folder name in front of its name, with exceptions for pass-through folders. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="122067ff5d769a9d197d10531945c83ebd902129729c0681965cf635dc396d5feb1d">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Prefix%20tracks%20with%20parent%20name.lua</source>
+        <source platform="windows" main="main" hash="122067ff5d769a9d197d10531945c83ebd902129729c0681965cf635dc396d5feb1d">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Prefix%20tracks%20with%20parent%20name.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Standardize track names and sort.lua" type="script" desc="BLV Standardize track names and sort">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Tidies track names to one standard and sorts them. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12208ebe9efa97ca1921063463a78041914b96b19df934af1b1c0f9b6442edc35e64">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Standardize%20track%20names%20and%20sort.lua</source>
+        <source platform="windows" main="main" hash="12208ebe9efa97ca1921063463a78041914b96b19df934af1b1c0f9b6442edc35e64">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Standardize%20track%20names%20and%20sort.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Rename and sort tracks by folder.lua" type="script" desc="BLV Rename and sort tracks by folder">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Renames tracks after their folder and sorts them by the folder hierarchy. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220abc64791d9916da920b5d2136a9092929e720654352d2df28a8e60a94add1df7">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Rename%20and%20sort%20tracks%20by%20folder.lua</source>
+        <source platform="windows" main="main" hash="1220abc64791d9916da920b5d2136a9092929e720654352d2df28a8e60a94add1df7">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Rename%20and%20sort%20tracks%20by%20folder.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Rename and sort drum tracks.lua" type="script" desc="BLV Rename and sort drum tracks">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Renames drum tracks to standard names (kick, snare, hats, and so on) and sorts them. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="122084e78eae0ca8b4ce3927d52a3b6f511babdb002e3040c9c4b9615dd0bb58ff6e">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Rename%20and%20sort%20drum%20tracks.lua</source>
+        <source platform="windows" main="main" hash="122084e78eae0ca8b4ce3927d52a3b6f511babdb002e3040c9c4b9615dd0bb58ff6e">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Tracks/BLV_Rename%20and%20sort%20drum%20tracks.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <category name="Folders and Selection">
+    <reapack name="BLV_Collapse folders by depth.lua" type="script" desc="BLV Collapse folders by depth">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+A small window to expand, collapse or limit folder tracks by how deep they are nested; remembers the last choice per project. Requires: ReaImGui. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220515a675fce1342976b2b3324a079612fece4c169ac294700168b388b26fc5e1f">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Collapse%20folders%20by%20depth.lua</source>
+        <source platform="windows" main="main" hash="1220515a675fce1342976b2b3324a079612fece4c169ac294700168b388b26fc5e1f">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Collapse%20folders%20by%20depth.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Select children of selected folders.lua" type="script" desc="BLV Select children of selected folders">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Selects every track inside the selected folder tracks. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220512b2a621018c1fe65913d390f0751f980ecafc70c5c670eea8d166c4820382a">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Select%20children%20of%20selected%20folders.lua</source>
+        <source platform="windows" main="main" hash="1220512b2a621018c1fe65913d390f0751f980ecafc70c5c670eea8d166c4820382a">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Select%20children%20of%20selected%20folders.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Copy selected track numbers.lua" type="script" desc="BLV Copy selected track numbers">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Copies the numbers of the selected tracks to the clipboard, separated by commas. Requires: SWS. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="122043d28f1760f5ce92ece57d30b6adf2a57af9f52146b03639ad14301c7afbfa75">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Copy%20selected%20track%20numbers.lua</source>
+        <source platform="windows" main="main" hash="122043d28f1760f5ce92ece57d30b6adf2a57af9f52146b03639ad14301c7afbfa75">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Folders%20and%20Selection/BLV_Copy%20selected%20track%20numbers.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <category name="Mixing">
+    <reapack name="BLV_Exclusive solo click mode.lua" type="script" desc="BLV Exclusive solo click mode">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+A toggle: while it is on, clicking a track's solo button solos only that track. Requires: js_ReaScriptAPI. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="122086483c9dd4145c0b391297a5875b4b767f0de6c25a7d8a12a6b82277740c1a1c">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Exclusive%20solo%20click%20mode.lua</source>
+        <source platform="windows" main="main" hash="122086483c9dd4145c0b391297a5875b4b767f0de6c25a7d8a12a6b82277740c1a1c">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Exclusive%20solo%20click%20mode.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Reset all track volumes to 0 dB.lua" type="script" desc="BLV Reset all track volumes to 0 dB">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Sets every track's volume fader to 0 dB. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220a602d083c05f44ded20aa26e7e35c9e72039ec28139dd2e0d40b5ac63abee149">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Reset%20all%20track%20volumes%20to%200%20dB.lua</source>
+        <source platform="windows" main="main" hash="1220a602d083c05f44ded20aa26e7e35c9e72039ec28139dd2e0d40b5ac63abee149">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Reset%20all%20track%20volumes%20to%200%20dB.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 50 left.lua" type="script" desc="BLV Pan selected tracks 50 left">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks 50% left. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12206a78c03a22bbf1c725fc5a6edf5abefa8ac638ca72f70ccdfc8c444b5dd6c5b7">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2050%20left.lua</source>
+        <source platform="windows" main="main" hash="12206a78c03a22bbf1c725fc5a6edf5abefa8ac638ca72f70ccdfc8c444b5dd6c5b7">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2050%20left.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 50 right.lua" type="script" desc="BLV Pan selected tracks 50 right">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks 50% right. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220e8a364cd6d44b0437a9aa7625f5fc6e413684e92040fe265f20f6ea5634fafe9">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2050%20right.lua</source>
+        <source platform="windows" main="main" hash="1220e8a364cd6d44b0437a9aa7625f5fc6e413684e92040fe265f20f6ea5634fafe9">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2050%20right.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 70 left.lua" type="script" desc="BLV Pan selected tracks 70 left">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks 70% left. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220ace8e21fa1cba7dfb457f1885b9600277fb571adee0296e11a51824111567407">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2070%20left.lua</source>
+        <source platform="windows" main="main" hash="1220ace8e21fa1cba7dfb457f1885b9600277fb571adee0296e11a51824111567407">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2070%20left.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 70 right.lua" type="script" desc="BLV Pan selected tracks 70 right">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks 70% right. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220fb626300a8ad71f5507c4cfecf61a3daf574e4ba1c7be1da6e973381b2d04dea">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2070%20right.lua</source>
+        <source platform="windows" main="main" hash="1220fb626300a8ad71f5507c4cfecf61a3daf574e4ba1c7be1da6e973381b2d04dea">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%2070%20right.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 100 left.lua" type="script" desc="BLV Pan selected tracks 100 left">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks hard left. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220ac25e870af3cfe9772983aa411e1d5eb17fefdd5ecd8178e80d63ff54eb884ec">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%20100%20left.lua</source>
+        <source platform="windows" main="main" hash="1220ac25e870af3cfe9772983aa411e1d5eb17fefdd5ecd8178e80d63ff54eb884ec">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%20100%20left.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Pan selected tracks 100 right.lua" type="script" desc="BLV Pan selected tracks 100 right">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Pans the selected tracks hard right. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12203af144cd50ecf5de7dd8532a1c2e81216c8c2b916f178463ebc1e812f1613726">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%20100%20right.lua</source>
+        <source platform="windows" main="main" hash="12203af144cd50ecf5de7dd8532a1c2e81216c8c2b916f178463ebc1e812f1613726">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Mixing/BLV_Pan%20selected%20tracks%20100%20right.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <category name="Editing">
+    <reapack name="BLV_Create doubles from takes.lua" type="script" desc="BLV Create doubles from takes">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Makes a staggered left and right pair from a lead track's takes, named "1 L" and "2 R" and panned hard left and right. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220d76cbecaf80f68500ec05cdfa002c548b63f15572a06ca681ce4ee151685b599">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Create%20doubles%20from%20takes.lua</source>
+        <source platform="windows" main="main" hash="1220d76cbecaf80f68500ec05cdfa002c548b63f15572a06ca681ce4ee151685b599">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Create%20doubles%20from%20takes.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Extend items to fill gaps.lua" type="script" desc="BLV Extend items to fill gaps">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Extends each selected item's end to the start of the next item across the selected tracks (no time-stretching). Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220e0990fc28f4e686647c949ab77a7ea88aa2addf4bb410412eea079c3a923c0e6">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Extend%20items%20to%20fill%20gaps.lua</source>
+        <source platform="windows" main="main" hash="1220e0990fc28f4e686647c949ab77a7ea88aa2addf4bb410412eea079c3a923c0e6">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Extend%20items%20to%20fill%20gaps.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Smart zoom.lua" type="script" desc="BLV Smart zoom">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Cycles the arrange view through set bar lengths, then fits the loop, the selected items, the region or the whole project. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220c7c4cceead3c13fdfd507f0a5721381b80cde085546442eb1493e5efb11cbf77">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Smart%20zoom.lua</source>
+        <source platform="windows" main="main" hash="1220c7c4cceead3c13fdfd507f0a5721381b80cde085546442eb1493e5efb11cbf77">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Smart%20zoom.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Set project end and render range to cursor.lua" type="script" desc="BLV Set project end and render range to cursor">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+After asking, ends the project at the edit cursor and sets the render range from the start to the cursor. Requires: SWS. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="12209f24bbd41672f63f3829b1cfeb1e0d4b46520f4e6b714ef2fe5b701b734f56d5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Set%20project%20end%20and%20render%20range%20to%20cursor.lua</source>
+        <source platform="windows" main="main" hash="12209f24bbd41672f63f3829b1cfeb1e0d4b46520f4e6b714ef2fe5b701b734f56d5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Set%20project%20end%20and%20render%20range%20to%20cursor.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Rename plug-in everywhere.lua" type="script" desc="BLV Rename plug-in everywhere">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Renames every instance of the selected plug-in across the project in one go. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T16:42:18Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220411ffecbc21898756be64ac9bd94ba3c5e6335d4d1a05252dd8a5710cb4769e5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Rename%20plug-in%20everywhere.lua</source>
+        <source platform="windows" main="main" hash="1220411ffecbc21898756be64ac9bd94ba3c5e6335d4d1a05252dd8a5710cb4769e5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Rename%20plug-in%20everywhere.lua</source>
       </version>
     </reapack>
   </category>
