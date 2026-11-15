@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<index version="1" name="BLV" commit="0aa2360a6be19f38b45eb94991f15a827c98be70">
+<index version="1" name="BLV" commit="04b43619255af79d22e65452782bf09c73957dbc">
   <metadata>
     <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
 BLV scripts for REAPER. All rights reserved, free to use.\par
@@ -449,6 +449,19 @@ Renames every instance of the selected plug-in across the project in one go. Cop
         <changelog>First release.</changelog>
         <source platform="darwin" main="main" hash="1220411ffecbc21898756be64ac9bd94ba3c5e6335d4d1a05252dd8a5710cb4769e5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Rename%20plug-in%20everywhere.lua</source>
         <source platform="windows" main="main" hash="1220411ffecbc21898756be64ac9bd94ba3c5e6335d4d1a05252dd8a5710cb4769e5">https://github.com/kvdence/blv-reapack/raw/6bf2b97e52f909b9fc5fc2ffb5812b47d7cc7263/Scripts/Editing/BLV_Rename%20plug-in%20everywhere.lua</source>
+      </version>
+    </reapack>
+    <reapack name="BLV_Clean up FX names in focused chain.lua" type="script" desc="BLV Clean up FX names in focused chain">
+      <metadata>
+        <description>{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\f0\pard
+Tidies the plug-in names in the FX chain you are looking at: drops prefixes such as "VST3:" and "AU:", maker names in brackets and UADx tags. Names you renamed yourself are left alone. Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.\par
+}</description>
+        <link rel="website">https://github.com/kvdence/blv-reapack</link>
+      </metadata>
+      <version name="1.0.0" author="BLV" time="2026-11-15T17:07:44Z">
+        <changelog>First release.</changelog>
+        <source platform="darwin" main="main" hash="1220b482cd78aacf489f586f943cd7795b2b9d8e5bbdea5a4e44436efa26353f23e8">https://github.com/kvdence/blv-reapack/raw/04b43619255af79d22e65452782bf09c73957dbc/Scripts/Editing/BLV_Clean%20up%20FX%20names%20in%20focused%20chain.lua</source>
+        <source platform="windows" main="main" hash="1220b482cd78aacf489f586f943cd7795b2b9d8e5bbdea5a4e44436efa26353f23e8">https://github.com/kvdence/blv-reapack/raw/04b43619255af79d22e65452782bf09c73957dbc/Scripts/Editing/BLV_Clean%20up%20FX%20names%20in%20focused%20chain.lua</source>
       </version>
     </reapack>
   </category>
