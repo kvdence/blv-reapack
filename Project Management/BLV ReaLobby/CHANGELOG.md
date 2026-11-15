@@ -1,5 +1,13 @@
 # BLV ReaLobby changelog
 
+## 0.1.2 (2026-11-15)
+
+Now for Windows too (checked on Windows 11 with REAPER 7.82 and ReaImGui 0.10.0.5), as well as macOS.
+
+- Pressing Esc to close a song's right-click menu no longer closes the whole ReaLobby window.
+- The clean-up list shows each file relative to the song's folder on Windows too ("Audio/take.wav"), not its full path.
+- The unused-audio check lists each folder once, so it finishes sooner (most noticeable on Windows, where each folder listing takes about a quarter of a second).
+
 ## 0.1.1 (2026-11-15)
 
 First public release, on ReaPack. macOS only; Windows not yet checked. Needs REAPER 7.74 or newer and ReaImGui.

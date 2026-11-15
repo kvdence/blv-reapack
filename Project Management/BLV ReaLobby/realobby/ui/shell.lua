@@ -377,14 +377,17 @@ function shell.frame(ctx, state)
     body(ctx, state, x, y + L.top_h, w, h - L.top_h - L.foot_h)
     footer(ctx, state, x, y + h - L.foot_h, w)
 
-    -- Esc closes the window unless a dialog is open (the dialog takes it).
-    if not state.dialog and ImGui.IsKeyPressed(ctx, ImGui.Key_Escape, false)
+    -- Esc closes the window unless a dialog or a menu is open (the Esc
+    -- closes that instead). ImGui may already have closed a menu this frame,
+    -- so "open" means open at the end of the previous frame.
+    if not state.dialog and not state.popup_was_open and ImGui.IsKeyPressed(ctx, ImGui.Key_Escape, false)
       and ImGui.IsWindowFocused(ctx, ImGui.FocusedFlags_RootAndChildWindows) then
       open = false
     end
     -- Dialogs are popups of this window (its ID stack), drawn after the Esc
     -- check so the Esc that closes a dialog does not also close the window.
     if shell.panes.dialogs then shell.panes.dialogs(ctx, state) end
+    state.popup_was_open = ImGui.IsPopupOpen(ctx, "", ImGui.PopupFlags_AnyPopupId | ImGui.PopupFlags_AnyPopupLevel)
     ImGui.End(ctx)
   end
   theme.pop_font(ctx)

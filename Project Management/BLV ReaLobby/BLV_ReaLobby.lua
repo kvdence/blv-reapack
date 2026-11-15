@@ -1,7 +1,7 @@
 -- @description BLV ReaLobby
 -- @author BLV
--- @version 0.1.1
--- @about A project launcher for REAPER. Requires REAPER 7.74 or newer and ReaImGui.
+-- @version 0.1.2
+-- @about A project launcher for REAPER. Requires REAPER 7.74 or newer and ReaImGui. macOS and Windows.
 --   Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.
 -- @provides
 --   [nomain] BLV_ReaLobby_Timer.lua

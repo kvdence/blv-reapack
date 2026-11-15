@@ -175,7 +175,16 @@ end
 --   result = { dir, projects = { path }, folders = { path },
 --              files = { { path, name, size, extra = { peak path } } }, total }
 function M.scan(song, ctx)
-  local P, yield = ctx.P, ctx.yield
+  local yield = ctx.yield
+  -- Each folder is listed once per check (a listing costs a shell command,
+  -- about a quarter of a second on Windows).
+  local P = setmetatable({}, { __index = ctx.P })
+  local listings = {}
+  function P.list_dir(dir)
+    local k = norm(dir)
+    if listings[k] == nil then listings[k] = ctx.P.list_dir(dir) or {} end
+    return listings[k]
+  end
   if song.cloud_only then return nil, M.CLOUD_MSG end
   local dir = paths.clean(parent(song.newest))
   local listing = P.list_dir(dir) or {}
@@ -343,10 +352,8 @@ end
 
 -- Where a file is, relative to the song folder ("Media/take 3.wav").
 function M.relative(result, path)
-  local d = result.dir:gsub("[/\\]+$", "")
-  if path:sub(1, #d + 1):lower() == (d .. "/"):lower() or path:sub(1, #d + 1):lower() == (d .. "\\"):lower() then
-    return path:sub(#d + 2)
-  end
+  local d, p = paths.clean(result.dir), paths.clean(path)
+  if p:sub(1, #d + 1):lower() == (d .. "/"):lower() then return p:sub(#d + 2) end
   return path
 end
 
