@@ -29,39 +29,39 @@ One action each: run from the Actions list, a toolbar button or a shortcut. All 
 
 | Script | What it does | Needs |
 |---|---|---|
-| Alphabetize selected tracks | Sorts the selected tracks A to Z by name. Selected folders move as whole blocks and the folder structure is kept. | — |
-| Prefix selected tracks with parent name (skip BUS) | Puts each selected track's parent folder name in front of its name; "BUS" is left out of the parent name and BUS tracks are skipped. | — |
-| Prefix tracks with parent name | Puts each track's parent folder name in front of its name, with exceptions for pass-through folders. | — |
-| Standardize track names and sort | Tidies track names to one standard and sorts them. | — |
-| Rename and sort tracks by folder | Renames tracks after their folder and sorts them by the folder hierarchy. | — |
-| Rename and sort drum tracks | Renames drum tracks to standard names (kick, snare, hats, and so on) and sorts them. | — |
+| BLV Alphabetize selected tracks | Sorts the selected tracks A to Z by name. Selected folders move as whole blocks and the folder structure is kept. | — |
+| BLV Prefix selected tracks with parent name (skip BUS) | Puts each selected track's parent folder name in front of its name; "BUS" is left out of the parent name and BUS tracks are skipped. | — |
+| BLV Prefix tracks with parent name | Puts each track's parent folder name in front of its name, with exceptions for pass-through folders. | — |
+| BLV Standardize track names and sort | Tidies track names to one standard and sorts them. | — |
+| BLV Rename and sort tracks by folder | Renames tracks after their folder and sorts them by the folder hierarchy. | — |
+| BLV Rename and sort drum tracks | Renames drum tracks to standard names (kick, snare, hats, and so on) and sorts them. | — |
 
 ### Folders and Selection
 
 | Script | What it does | Needs |
 |---|---|---|
-| Collapse folders by depth | A small window to expand, collapse or limit folder tracks by how deep they are nested; remembers the last choice per project. | ReaImGui |
-| Select children of selected folders | Selects every track inside the selected folder tracks. | — |
-| Copy selected track numbers | Copies the numbers of the selected tracks to the clipboard, separated by commas. | SWS |
+| BLV Collapse folders by depth | A small window to expand, collapse or limit folder tracks by how deep they are nested; remembers the last choice per project. | ReaImGui |
+| BLV Select children of selected folders | Selects every track inside the selected folder tracks. | — |
+| BLV Copy selected track numbers | Copies the numbers of the selected tracks to the clipboard, separated by commas. | SWS |
 
 ### Mixing
 
 | Script | What it does | Needs |
 |---|---|---|
-| Exclusive solo click mode | A toggle: while it is on, clicking a track's solo button solos only that track. | js_ReaScriptAPI |
-| Reset all track volumes to 0 dB | Sets every track's volume fader to 0 dB. | — |
-| Pan presets | Pan the selected tracks 50, 70 or 100 percent left or right, one action each (six actions). | — |
+| BLV Exclusive solo click mode | A toggle: while it is on, clicking a track's solo button solos only that track. | js_ReaScriptAPI |
+| BLV Reset all track volumes to 0 dB | Sets every track's volume fader to 0 dB. | — |
+| BLV Pan presets | Pan the selected tracks 50, 70 or 100 percent left or right, one action each (six actions). | — |
 
 ### Editing
 
 | Script | What it does | Needs |
 |---|---|---|
-| Create doubles from takes | Makes a staggered left and right pair from a lead track's takes, named "1 L" and "2 R" and panned hard left and right. | — |
-| Extend items to fill gaps | Extends each selected item's end to the start of the next item across the selected tracks (no time-stretching). | — |
-| Smart zoom | Cycles the arrange view through set bar lengths, then fits the loop, the selected items, the region or the whole project. | — |
-| Set project end and render range to cursor | After asking, ends the project at the edit cursor and sets the render range from the start to the cursor. | SWS |
-| Rename plug-in everywhere | Renames every instance of the selected plug-in across the project in one go. | — |
-| Clean up FX names in focused chain | Tidies the plug-in names in the FX chain you are looking at: drops prefixes such as "VST3:" and "AU:", maker names in brackets and UADx tags. Names you renamed yourself are left alone. | — |
+| BLV Create doubles from takes | Makes a staggered left and right pair from a lead track's takes, named "1 L" and "2 R" and panned hard left and right. | — |
+| BLV Extend items to fill gaps | Extends each selected item's end to the start of the next item across the selected tracks (no time-stretching). | — |
+| BLV Smart zoom | Cycles the arrange view through set bar lengths, then fits the loop, the selected items, the region or the whole project. | — |
+| BLV Set project end and render range to cursor | After asking, ends the project at the edit cursor and sets the render range from the start to the cursor. | SWS |
+| BLV Rename plug-in everywhere | Renames every instance of the selected plug-in across the project in one go. | — |
+| BLV Clean up FX names in focused chain | Tidies the plug-in names in the FX chain you are looking at: drops prefixes such as "VST3:" and "AU:", maker names in brackets and UADx tags. Names you renamed yourself are left alone. | — |
 
 ## Licence
 
