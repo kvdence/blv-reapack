@@ -1,5 +1,16 @@
 # BLV ReaLobby changelog
 
+## 0.1.4 (2026-11-15)
+
+Fixes the moments where ReaLobby made REAPER stand still.
+
+- Selecting a song whose audio folder holds about 500 files or more no longer freezes REAPER for ten seconds (macOS and Windows). On macOS the same fault also hid that folder's last few files, so such a song could wrongly say "media files missing"; it now sees them all.
+- Clean up unused audio opens at once and shows "Checking this song's media folders…" while it works. Before, a song with many large backups could freeze REAPER for close to a minute. Move to Trash checks once more the same way, and you can cancel while it checks.
+- The unused-audio figure in the details is worked out in small steps, so you can keep clicking and typing while it runs. It is also about four times faster on songs with many backups.
+- Folders are read in the background, on macOS and on Windows. A sleeping external drive or a slow cloud folder now only delays its own song's lists; the window keeps working. Media on a drive that does not answer are no longer called missing, and the clean-up offers nothing when a folder could not be read.
+- The Settings folder browser no longer stutters while it counts projects, and Open folder and Show in Finder/Explorer no longer wait for the disk.
+- Windows: much quicker all round. Reading a folder used to take about a second each time (and hold REAPER for it); it is now done in the background in a few hundredths of a second. Rename, Move, Archive and Move to Trash answer in about a tenth of a second instead of two or three seconds, and opening the folder browser no longer pauses for the drive list.
+
 ## 0.1.3 (2026-11-15)
 
 - Double-clicking a song now asks "Open …?" first (Enter or Open confirms). Switch it off in Settings → Behaviour. Enter in the list still opens at once.

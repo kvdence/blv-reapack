@@ -15,7 +15,10 @@
 -- SongView.cloud_only is true when the newest version is a cloud placeholder
 -- (platform list_dir): it is never read, since reading would download it.
 -- Scan folders are listed with ONE command each when P.list_tree exists
--- (otherwise folder by folder). opts.cache is a table of parsed projects
+-- (otherwise folder by folder). Where P can list without waiting
+-- (P.list_dir_start, P.list_tree_start) a step starts up to MAX_JOBS
+-- listings and takes each one in on a later step, so a slow or sleeping
+-- drive never holds up a frame. opts.cache is a table of parsed projects
 -- kept between runs (key: path, size and mtime); L:cache_table() returns the
 -- entries the last finished walk used, for saving.
 -- After changing pins, status, tags or hidden in data.songs, the UI must call
@@ -27,6 +30,7 @@ local paths = require("realobby.paths")
 local M = {}
 
 local MAX_DEPTH = 4
+local MAX_JOBS = 4
 local REGROUP_EVERY = 25
 local HITS_PER_OP = 16
 local SKIP_DIRS = { backups = true, audio = true, media = true, peaks = true, recordedaudio = true }
@@ -72,6 +76,7 @@ function M.new(opts)
   local L = {}
   local cache = opts.cache or {}   -- path..size..mtime -> info (kept between runs)
   local files, shown, walking, dir_queue, parse_queue
+  local jobs = {}             -- listings on their way: { op, job }
   local dir_head, parse_head
   local parsed_since = 0
   local views = {}            -- include_hidden -> cached SongView list
@@ -103,6 +108,7 @@ function M.new(opts)
   function L:refresh()
     files = {}
     walking = true
+    jobs = {}
     dir_queue, parse_queue = {}, {}
     dir_head, parse_head = 1, 1
     for _, folder in ipairs(data.scan_folders or {}) do
@@ -139,14 +145,14 @@ function M.new(opts)
   for name in pairs(SKIP_DIRS) do SKIP_LIST[#SKIP_LIST + 1] = name end
   table.sort(SKIP_LIST)
 
-  local function do_dir(op)
+  -- Takes in the listing of one queued folder (or scan-folder tree).
+  local function take_dir(op, entries)
     if op.tree then
-      for _, e in ipairs(P.list_tree(op.tree, MAX_DEPTH, SKIP_LIST) or {}) do
+      for _, e in ipairs(entries) do
         add_file(e.path, e.size, e.mtime, e.cloud_only)
       end
       return
     end
-    local entries = P.list_dir(op.dir) or {}
     if op.recent then
       local present = {}
       for _, e in ipairs(entries) do
@@ -168,6 +174,24 @@ function M.new(opts)
       elseif is_rpp(e.name) then
         add_file(e.path, e.size, e.mtime, e.cloud_only)
       end
+    end
+  end
+
+  -- Lists one queued folder: started and taken in later when P can list
+  -- without waiting, at once otherwise.
+  local function do_dir(op)
+    local job
+    if op.tree then
+      job = P.list_tree_start and P.list_tree_start(op.tree, MAX_DEPTH, SKIP_LIST)
+    else
+      job = P.list_dir_start and P.list_dir_start(op.dir)
+    end
+    if job then
+      jobs[#jobs + 1] = { op = op, job = job }
+    elseif op.tree then
+      take_dir(op, P.list_tree(op.tree, MAX_DEPTH, SKIP_LIST) or {})
+    else
+      take_dir(op, P.list_dir(op.dir) or {})
     end
   end
 
@@ -202,9 +226,20 @@ function M.new(opts)
     local limit = budget * HITS_PER_OP
     local cost = 0
     local started = clock and clock()
+    -- Listings that have come in since the last step.
+    local i = 1
+    while i <= #jobs do
+      local entries = jobs[i].job.poll()
+      if entries then
+        take_dir(jobs[i].op, entries)
+        table.remove(jobs, i)
+      else
+        i = i + 1
+      end
+    end
     while true do
       if started and cost > 0 and clock() - started >= time_budget then return false end
-      if dir_head <= #dir_queue then
+      if dir_head <= #dir_queue and #jobs < MAX_JOBS then
         if cost + HITS_PER_OP > limit then return false end
         local op = dir_queue[dir_head]
         dir_queue[dir_head] = false
@@ -219,6 +254,8 @@ function M.new(opts)
         parse_head = parse_head + 1
         do_parse(path)
         cost = cost + c
+      elseif #jobs > 0 then
+        return false   -- waiting for listings
       else
         if walking then
           walking = false
@@ -358,12 +395,18 @@ function M.new(opts)
         local listings, missing = {}, {}
         for _, path in ipairs(info.media or {}) do
           local dir = dirname(path)
-          if not listings[dir] then
-            local set = {}
-            for _, e in ipairs(list_dir(dir) or {}) do set[e.name:lower()] = true end
+          if listings[dir] == nil then
+            local entries = list_dir(dir) or {}
+            -- A folder that could not be listed (its drive did not answer)
+            -- says nothing about its files: they are not called missing.
+            local set = false
+            if not entries.failed then
+              set = {}
+              for _, e in ipairs(entries) do set[e.name:lower()] = true end
+            end
             listings[dir] = set
           end
-          if not listings[dir][basename(path):lower()] then missing[#missing + 1] = path end
+          if listings[dir] and not listings[dir][basename(path):lower()] then missing[#missing + 1] = path end
         end
         media_missing[key] = missing
         -- Only this song changes: update it in the cached views in place, so

@@ -22,6 +22,14 @@
 --     a plug-in uses can still be offered (the dialog says so).
 --   * Unused files go to the Trash (with their .reapeaks peak files), never
 --     removed for good, and only while no project in the folder is open.
+--   * A folder that could not be listed (its drive did not answer) means
+--     nothing is offered.
+--
+-- The check works in small pieces (M.CHUNK bytes of project text, M.B64_BLOCK
+-- characters of a saved plug-in state) and calls ctx.yield between them, so
+-- the window can draw between pieces. A piece of plug-in state that an
+-- earlier project file already held is not decoded again: backups repeat
+-- the same states, and decoding is the slow part.
 local rpp = require("realobby.rpp")
 local paths = require("realobby.paths")
 local backups = require("realobby.backups")
@@ -69,46 +77,113 @@ do
   for i = 1, #chars do B64[chars:byte(i)] = i - 1 end
 end
 
+M.CHUNK = 65536       -- bytes of project text looked at per step
+M.B64_BLOCK = 16384   -- base64 characters decoded per step (a multiple of 4)
+M.SEEN_LIMIT = 64 * 1024 * 1024   -- bytes of plug-in state remembered as already searched
+
 -- Decodes base64 text (groups of four; "=" ends a segment, the next one
 -- carries on). Bytes that are not base64 are skipped.
 function M.b64decode(s)
-  s = s:gsub("[^%w%+/=]", "")
+  s = s:gsub("[^A-Za-z0-9%+/=]", "")
   local out, n = {}, 0
-  for i = 1, #s - 3, 4 do
-    local a, b, c, d = s:byte(i, i + 3)
+  local i, len = 1, #s
+  local byte, char = string.byte, string.char
+  -- Twelve characters at a time while no "=" is near (the usual case).
+  local pad = s:find("=", 1, true) or (len + 1)
+  while i + 11 < pad do
+    local a, b, c, d, e, f, g, h, j, k, l, m = byte(s, i, i + 11)
+    local x = B64[a] << 18 | B64[b] << 12 | B64[c] << 6 | B64[d]
+    local y = B64[e] << 18 | B64[f] << 12 | B64[g] << 6 | B64[h]
+    local z = B64[j] << 18 | B64[k] << 12 | B64[l] << 6 | B64[m]
+    n = n + 1
+    out[n] = char(x >> 16, (x >> 8) & 255, x & 255, y >> 16, (y >> 8) & 255, y & 255,
+      z >> 16, (z >> 8) & 255, z & 255)
+    i = i + 12
+  end
+  for q = i, len - 3, 4 do
+    local a, b, c, d = byte(s, q, q + 3)
     local va, vb = B64[a], B64[b]
     if va and vb then
       local vc, vd = B64[c], B64[d]
       local x = va * 262144 + vb * 4096 + (vc or 0) * 64 + (vd or 0)
       n = n + 1
       if vc and vd then
-        out[n] = string.char(x >> 16, (x >> 8) & 255, x & 255)
+        out[n] = char(x >> 16, (x >> 8) & 255, x & 255)
       elseif vc then
-        out[n] = string.char(x >> 16, (x >> 8) & 255)
+        out[n] = char(x >> 16, (x >> 8) & 255)
       else
-        out[n] = string.char(x >> 16)
+        out[n] = char(x >> 16)
       end
     end
   end
   return table.concat(out)
 end
 
--- The decoded text of each run of base64-only lines (saved plug-in states).
-local function decoded_runs(text, yield)
-  local out, run = {}, {}
-  local function close()
-    if #run > 0 then
-      out[#out + 1] = M.b64decode(table.concat(run)):lower()
-      run = {}
+-- text in pieces of about size bytes, each ending at a line end.
+local function chunks(text, size)
+  local pos, n = 1, #text
+  return function()
+    if pos > n then return nil end
+    local stop = n
+    if pos + size - 1 < n then stop = text:find("\n", pos + size - 1, true) or n end
+    local piece = text:sub(pos, stop)
+    pos = stop + 1
+    return piece
+  end
+end
+
+-- Feeds every run of base64-only lines (a saved plug-in state) of a project
+-- text, a block at a time, to found(decoded lower-case text). Blocks overlap
+-- by `overlap` characters so a name across two blocks is still seen. seen
+-- holds the blocks already searched (in this or an earlier project file):
+-- those are skipped. feed(piece) takes the text piece by piece; finish()
+-- ends the last run.
+local function state_reader(overlap, seen, found, yield)
+  local parts, size, carry = {}, 0, ""
+  local function search(block)
+    local raw = carry .. block
+    if not seen[raw] then
+      if seen.bytes < M.SEEN_LIMIT then
+        seen[raw] = true
+        seen.bytes = seen.bytes + #raw
+      end
+      found(M.b64decode(raw):lower())
       if yield then yield() end
     end
+    carry = #block > overlap and block:sub(-overlap) or (carry .. block):sub(-overlap)
   end
-  for line in (text .. "\n"):gmatch("([^\n]*)\n") do
-    local l = line:match("^%s*(.-)%s*$")
-    if #l >= 8 and not l:find("[^%w%+/=]") then run[#run + 1] = l else close() end
+  -- Searches whole blocks; with all, also what is left (the run has ended).
+  local function drain(all)
+    if size < M.B64_BLOCK and not (all and size > 0) then return end
+    local buf = table.concat(parts)
+    local pos = 1
+    while #buf - pos + 1 >= M.B64_BLOCK do
+      search(buf:sub(pos, pos + M.B64_BLOCK - 1))
+      pos = pos + M.B64_BLOCK
+    end
+    if all then
+      if pos <= #buf then search(buf:sub(pos)) end
+      parts, size, carry = {}, 0, ""
+    else
+      local rest = buf:sub(pos)
+      parts, size = { rest }, #rest
+    end
   end
-  close()
-  return out
+  local R = {}
+  function R.feed(piece)
+    for line in piece:gmatch("[^\n]+") do
+      local l = line:match("^%s*(.-)%s*$")
+      if #l >= 8 and not l:find("[^%w%+/=]") then
+        parts[#parts + 1] = l
+        size = size + #l
+        drain(false)
+      else
+        drain(true)
+      end
+    end
+  end
+  function R.finish() drain(true) end
+  return R
 end
 
 -- UTF-8 text as UTF-16LE bytes (how some plug-ins save file names).
@@ -133,29 +208,36 @@ end
 
 -- refs(text, project_path) -> { normalized media path = path }, { record folders },
 -- { render paths }
-local function refs(text, project_path)
+local function refs(text, project_path, yield)
   local dir = parent(project_path)
   local set, rec, render = {}, {}, {}
-  for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+  local function line_refs(line)
     local key, rest = line:match("^%s*(%u[%u_]*)%s+(.-)%s*$")
-    if key == "FILE" or key == "RECORD_PATH" or key == "RENDER_FILE" then
-      local tokens = rpp.tokenize(rest)
-      if key == "FILE" then
-        local p = tokens[1]
-        if p and p ~= "" then
-          if not is_absolute(p) then p = dir .. "/" .. p end
-          p = paths.clean(p)
-          set[norm(p)] = p
-        end
-      elseif key == "RENDER_FILE" then
-        local p = tokens[1]
-        if p and p ~= "" then render[#render + 1] = paths.clean(is_absolute(p) and p or (dir .. "/" .. p)) end
-      else
-        for _, p in ipairs(tokens) do
-          if p ~= "" then rec[#rec + 1] = paths.clean(is_absolute(p) and p or (dir .. "/" .. p)) end
-        end
+    if key ~= "FILE" and key ~= "RECORD_PATH" and key ~= "RENDER_FILE" then return end
+    local tokens = rpp.tokenize(rest)
+    if key == "FILE" then
+      local p = tokens[1]
+      if p and p ~= "" then
+        if not is_absolute(p) then p = dir .. "/" .. p end
+        p = paths.clean(p)
+        set[norm(p)] = p
+      end
+    elseif key == "RENDER_FILE" then
+      local p = tokens[1]
+      if p and p ~= "" then render[#render + 1] = paths.clean(is_absolute(p) and p or (dir .. "/" .. p)) end
+    else
+      for _, p in ipairs(tokens) do
+        if p ~= "" then rec[#rec + 1] = paths.clean(is_absolute(p) and p or (dir .. "/" .. p)) end
       end
     end
+  end
+  for piece in chunks(text, M.CHUNK) do
+    -- Most of a large project is saved plug-in states: a piece without these
+    -- words has no such line.
+    if piece:find("FILE", 1, true) or piece:find("RECORD_PATH", 1, true) then
+      for line in piece:gmatch("[^\n]+") do line_refs(line) end
+    end
+    if yield then yield() end
   end
   return set, rec, render
 end
@@ -179,10 +261,13 @@ function M.scan(song, ctx)
   -- Each folder is listed once per check (a listing costs a shell command,
   -- about a quarter of a second on Windows).
   local P = setmetatable({}, { __index = ctx.P })
-  local listings = {}
+  local listings, unlisted = {}, nil
   function P.list_dir(dir)
     local k = norm(dir)
-    if listings[k] == nil then listings[k] = ctx.P.list_dir(dir) or {} end
+    if listings[k] == nil then
+      listings[k] = ctx.P.list_dir(dir) or {}
+      if listings[k].failed then unlisted = unlisted or dir end
+    end
     return listings[k]
   end
   if song.cloud_only then return nil, M.CLOUD_MSG end
@@ -217,7 +302,7 @@ function M.scan(song, ctx)
   for _, path in ipairs(projects) do
     local text = ctx.read(path)
     if not text then return nil, "Could not read " .. basename(path) .. ", so nothing is offered." end
-    local set, rec, ren = refs(text, path)
+    local set, rec, ren = refs(text, path, yield)
     for k, v in pairs(set) do used[k] = v end
     for _, r in ipairs(rec) do record[#record + 1] = r end
     for _, r in ipairs(ren) do renders[#renders + 1] = r end
@@ -292,29 +377,71 @@ function M.scan(song, ctx)
   end
 
   -- Keep any file a project names anywhere: plain text, or in a plug-in's
-  -- saved state.
+  -- saved state. Every candidate is an audio file, so its name ends in an
+  -- extension: each place a text holds that extension is checked for the
+  -- names that end there (the same as looking for every name, in one pass).
   if #candidates > 0 then
-    for _, path in ipairs(projects) do
-      local raw = ctx.read(path) or ""
-      local hay = { raw:lower() }
-      for _, d in ipairs(decoded_runs(raw, yield)) do hay[#hay + 1] = d end
-      local keep = {}
-      for i, c in ipairs(candidates) do
-        local n = c.name:lower()
-        local u = utf16(n)
-        for _, h in ipairs(hay) do
-          if h:find(n, 1, true) or h:find(u, 1, true) then keep[i] = true; break end
+    -- by_ext[extension][name length][name] = { candidates }
+    local by_ext, longest = {}, 0
+    local function add(key, c, name)
+      by_ext[key] = by_ext[key] or {}
+      local by_len = by_ext[key]
+      by_len[#name] = by_len[#name] or {}
+      local list = by_len[#name][name] or {}
+      by_len[#name][name] = list
+      list[#list + 1] = c
+      if #name > longest then longest = #name end
+    end
+    for _, c in ipairs(candidates) do
+      local n = c.name:lower()
+      local e = "." .. ext(n)
+      add(e, c, n)
+      add(utf16(e), c, utf16(n))
+    end
+    local left = #candidates
+    local function found(hay)
+      for key, by_len in pairs(by_ext) do
+        local pos = hay:find(key, 1, true)
+        while pos do
+          local stop = pos + #key - 1
+          for len, names in pairs(by_len) do
+            local list = stop >= len and names[hay:sub(stop - len + 1, stop)]
+            if list then
+              for _, c in ipairs(list) do
+                if not c.keep then
+                  c.keep = true
+                  left = left - 1
+                end
+              end
+            end
+          end
+          pos = hay:find(key, pos + 1, true)
         end
       end
-      local rest = {}
-      for i, c in ipairs(candidates) do
-        if not keep[i] then rest[#rest + 1] = c end
-      end
-      candidates = rest
-      if yield then yield() end
-      if #candidates == 0 then break end
     end
+    -- Base64 holds three bytes in four characters.
+    local overlap = ((longest * 4 + 2) // 3 + 8 + 3) // 4 * 4
+    local seen = { bytes = 0 }
+    for _, path in ipairs(projects) do
+      local raw = ctx.read(path) or ""
+      local states = state_reader(overlap, seen, found, yield)
+      for piece in chunks(raw, M.CHUNK) do
+        found(piece:lower())
+        states.feed(piece)
+        if yield then yield() end
+        if left == 0 then break end
+      end
+      states.finish()
+      if left == 0 then break end
+    end
+    local rest = {}
+    for _, c in ipairs(candidates) do
+      if not c.keep then rest[#rest + 1] = c end
+    end
+    candidates = rest
   end
+
+  if unlisted then return nil, "Could not list " .. basename(unlisted) .. ", so nothing is offered." end
 
   table.sort(candidates, function(a, b) return norm(a.path) < norm(b.path) end)
   local total = 0

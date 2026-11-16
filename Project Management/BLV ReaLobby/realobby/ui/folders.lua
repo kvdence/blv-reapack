@@ -19,7 +19,13 @@
 --     deadline, min }) until clock() reaches deadline, after at least min
 --     listings; true when every count is in.
 --     A count is the .RPP files inside the folder or one level down.
+--   Where P can list without waiting (P.list_dir_start), nothing here waits
+--   for a folder: nav:go starts the listing and nav:loading() is true until
+--   a later nav:step has taken it in; the counts run M.MAX_JOBS listings at a
+--   time. A sleeping or unreachable drive then only delays its own rows.
 local M = {}
+
+M.MAX_JOBS = 4
 
 local function is_win_path(p)
   return p:match("^%a:") ~= nil or p:match("^[/\\][/\\]") ~= nil
@@ -108,6 +114,8 @@ function M.new(o)
   local P = o.P
   local nav = {}
   local cur, list, work
+  local loading          -- the listing of cur, while it is on its way
+  local running = {}     -- count listings on their way: { job, item }
 
   local function subfolders(entries)
     local out = {}
@@ -125,9 +133,8 @@ function M.new(o)
     return n
   end
 
-  function nav:go(path)
-    cur = trim_end(path)
-    list = subfolders(P.list_dir(cur) or {})
+  local function show(listing)
+    list = subfolders(listing)
     table.sort(list, function(a, b)
       local la, lb = a.name:lower(), b.name:lower()
       if la ~= lb then return la < lb end
@@ -141,6 +148,20 @@ function M.new(o)
     end
     list = entries
   end
+
+  function nav:go(path)
+    cur = trim_end(path)
+    running = {}
+    loading = P.list_dir_start and P.list_dir_start(cur) or nil
+    if loading then
+      list, work = {}, {}
+    else
+      show(P.list_dir(cur) or {})
+    end
+  end
+
+  -- true while the folders of path() are still being listed.
+  function nav:loading() return loading ~= nil end
 
   function nav:path() return cur end
   function nav:entries() return list end
@@ -175,29 +196,56 @@ function M.new(o)
 
   -- Each entry gathers its own count and its subfolders' into acc; rpp is
   -- set once nothing for it is left to list.
+  local function counted(job, entries)
+    local e = job.entry
+    e.acc = (e.acc or 0) + count_rpp(entries)
+    e.pending = (e.pending or 1) - 1
+    if job.first then
+      for _, sub in ipairs(subfolders(entries)) do
+        e.pending = e.pending + 1
+        table.insert(work, 1, { entry = e, dir = sub.path })
+      end
+    end
+    if e.pending == 0 then e.rpp, e.acc, e.pending = e.acc, nil, nil end
+  end
+
   function nav:step(n)
+    if loading then
+      local listing = loading.poll()
+      if not listing then return false end
+      loading = nil
+      show(listing)
+    end
+    -- Count listings that have come in, then start more (never waiting).
+    local i = 1
+    while i <= #running do
+      local entries = running[i].job.poll()
+      if entries then
+        counted(running[i].item, entries)
+        table.remove(running, i)
+      else
+        i = i + 1
+      end
+    end
     local limit, clock, deadline, min = n, nil, nil, 0
     if type(n) == "table" then
       limit, clock, deadline, min = math.huge, n.clock, n.deadline, n.min or 0
     end
     local done = 0
     while #work > 0 and done < limit do
-      if clock and done >= min and clock() >= deadline then break end
-      local job = table.remove(work, 1)
-      local e = job.entry
-      local entries = P.list_dir(job.dir) or {}
-      done = done + 1
-      e.acc = (e.acc or 0) + count_rpp(entries)
-      e.pending = (e.pending or 1) - 1
-      if job.first then
-        for _, sub in ipairs(subfolders(entries)) do
-          e.pending = e.pending + 1
-          table.insert(work, 1, { entry = e, dir = sub.path })
-        end
+      local job = P.list_dir_start and #running < M.MAX_JOBS and P.list_dir_start(work[1].dir)
+      if job then
+        running[#running + 1] = { job = job, item = table.remove(work, 1) }
+      elseif P.list_dir_start and #running > 0 then
+        break   -- as many as may run at once
+      else
+        if clock and done >= min and clock() >= deadline then break end
+        local item = table.remove(work, 1)
+        counted(item, P.list_dir(item.dir) or {})
+        done = done + 1
       end
-      if e.pending == 0 then e.rpp, e.acc, e.pending = e.acc, nil, nil end
     end
-    return #work == 0
+    return #work == 0 and #running == 0
   end
 
   nav:go(o.start)

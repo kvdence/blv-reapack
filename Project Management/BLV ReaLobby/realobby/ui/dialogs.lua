@@ -23,6 +23,7 @@ local POPUP = "##realobby_dialog"
 local WIDTH = { open_confirm = 460, confirm = 640, settings = 720, first_run = 600, new_from_template = 600, cleanup = 640 }
 local DEFAULT_W = 560
 
+local SCAN_BUDGET = 0.012    -- seconds of the clean-up dialog's check per frame
 local COUNT_BUDGET = 0.008   -- seconds of folder listings per frame for the browsers' counts
 local count_deadline, counted = 0, false
 
@@ -128,6 +129,9 @@ end
 
 -- Buttons laid out from the right edge: list of { label, primary, disabled }.
 -- Returns the index of the clicked one.
+-- M.auto_press (tools/realobby/preview.sh, PREVIEW_PRESS): the label of a
+-- dialog button to press once, as soon as it is shown and enabled, so a check
+-- can run a dialog to its end without a mouse.
 local function buttons(ctx, list)
   ImGui.Dummy(ctx, 0, 4)
   local total = 0
@@ -140,6 +144,10 @@ local function buttons(ctx, list)
     ImGui.BeginDisabled(ctx, b[3] == true)
     if button(ctx, b[1], b[2]) then clicked = i end
     ImGui.EndDisabled(ctx)
+    if M.auto_press == b[1] and b[3] ~= true then
+      M.auto_press = nil
+      clicked = i
+    end
   end
   return clicked
 end
@@ -203,6 +211,14 @@ local function browser(ctx, state, b)
   -- every open browser, is spent; the first browser lists at least one.
   nav:step({ clock = state.clock or os.clock, deadline = count_deadline, min = counted and 0 or 1 })
   counted = true
+  if b.need_drives then
+    local B = state.env.B
+    local drives, pending = B.drives()
+    if not pending then
+      b.need_drives = false
+      b.shortcuts = folders.shortcuts({ P = state.P, os = B.os(), home = b.home, drives = drives })
+    end
+  end
   local chosen, closed
 
   if chip(ctx, "##suggest", b.suggest_label, avail_w(ctx), "suggest") then
@@ -249,7 +265,7 @@ local function browser(ctx, state, b)
       ImGui.Dummy(ctx, 0, 0)
       ImGui.SetCursorScreenPos(ctx, x, y + rh + 2)
     end
-    if #list == 0 then box(ctx, "No folders here.", "faint") end
+    if #list == 0 then box(ctx, nav:loading() and "…" or "No folders here.", "faint") end
     ImGui.Dummy(ctx, 0, 0)
     ImGui.EndChild(ctx)
     if enter then nav:into(enter); b.sel = nil; b.err = nil end
@@ -272,11 +288,15 @@ local function open_browser(state, id)
   local B = state.env.B
   local home = B.home()
   local suggest, from_ini = folders.project_folder(B.ini_text(), home)
+  -- The drive letters (Windows) come in the background: need_drives is true
+  -- until they are in (browser() asks again each frame).
+  local drives, pending = B.drives()
   d.browse[id] = {
     nav = folders.new({ P = state.P, start = state.browse_start or suggest }),
     suggest = suggest,
     suggest_label = folders.suggestion_label(suggest, from_ini, home),
-    shortcuts = folders.shortcuts({ P = state.P, os = B.os(), home = home, drives = B.drives() }),
+    shortcuts = folders.shortcuts({ P = state.P, os = B.os(), home = home, drives = drives }),
+    home = home, need_drives = pending == true,
   }
 end
 
@@ -385,10 +405,27 @@ local function cleanup_body(ctx, state, args)
     if buttons(ctx, { { "Close", true } }) then close(state) end
     return
   end
-  -- A fresh check when the dialog opens (the details' tile can be older).
+  -- A fresh check when the dialog opens (the details' tile can be older),
+  -- and once more when "Move to Trash" is pressed. Each runs a few
+  -- milliseconds per frame, so the window never stands still for it.
+  local function check(key)
+    d[key] = d[key] or coroutine.create(function()
+      return cleanup.scan(song, details.cleanup_ctx(state, coroutine.yield))
+    end)
+    local done, ok, res, err = details.step(d[key], state.clock or os.clock, SCAN_BUDGET)
+    if not done then return false end
+    d[key] = nil
+    if not ok then return true, nil, tostring(res) end
+    return true, res, err
+  end
   if d.result == nil and d.error == nil then
-    local res, err = cleanup.scan(song, details.cleanup_ctx(state))
-    d.result, d.error = res, (not res) and err or nil
+    local done, res, err = check("first")
+    if not done then
+      box(ctx, "Checking this song's media folders…", "faint")
+      if buttons(ctx, { { "Cancel", true } }) then close(state) end
+      return
+    end
+    d.result, d.error = res, (not res) and (err or "Could not check.") or nil
     d.failed = not res
   end
   local res = d.result
@@ -424,13 +461,17 @@ local function cleanup_body(ctx, state, args)
   end
   error_box(ctx, d.error)
   local can = res and #res.files > 0 and not d.failed
-  local hit = buttons(ctx, (not can) and { { "Close", true } } or { { "Cancel", false }, { "Move to Trash", true } })
-  if hit == 1 then
-    close(state)
-  elseif hit == 2 then
-    local fresh, err = cleanup.scan(song, details.cleanup_ctx(state))
+  if d.confirming then
+    -- "Move to Trash" was pressed: the same check again, then the move.
+    local done, fresh, err = check("again")
+    if not done then
+      box(ctx, "Checking once more before anything moves…", "faint")
+      if buttons(ctx, { { "Cancel", false } }) then close(state) end
+      return
+    end
+    d.confirming = nil
     if not fresh then
-      d.error, d.failed = err, true
+      d.error, d.failed = err or "Could not check.", true
     elseif not cleanup.same(fresh, res) then
       d.result, d.error = fresh, A.CHANGED_MSG:gsub("Do it", "Move to Trash")
     else
@@ -444,6 +485,13 @@ local function cleanup_body(ctx, state, args)
         d.error, d.failed = msg, true
       end
     end
+    return
+  end
+  local hit = buttons(ctx, (not can) and { { "Close", true } } or { { "Cancel", false }, { "Move to Trash", true } })
+  if hit == 1 then
+    close(state)
+  elseif hit == 2 then
+    d.confirming = true
   end
 end
 
@@ -959,7 +1007,8 @@ end
 local PAGES = { overview_page, folders_page, statuses_page, look_page, behaviour_page }
 
 local function settings_body(ctx, state)
-  d.tab = d.tab or 1
+  -- (The preview's folder browser is on the Folders tab.)
+  d.tab = d.tab or (state.preview_browse and 2 or 1)
   -- Header: title, and a close × on the right.
   local x, y = ImGui.GetCursorScreenPos(ctx)
   local w = avail_w(ctx)

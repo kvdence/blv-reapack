@@ -61,39 +61,361 @@ end
 -- ExecProcess returns "<exit code>\n<output>", or nil / a negative code alone
 -- (-1 no wait, -3 timed out, -999 could not start) when the command did not
 -- finish. Those come back as a plain message without platform's success
--- marker, so platform's checked commands report a failure.
+-- marker, so platform's checked commands report a failure; the second result
+-- is then false.
 -- ExecProcess starts the program directly, without a shell, while platform.lua
 -- builds shell command lines. On Windows the line goes to cmd.exe as it is
 -- (CreateProcess passes it unchanged). On mac and linux ExecProcess splits the
 -- line itself and mangles quotes, so the line is written to a temporary file
 -- (Lua's /tmp/lua_XXXXXX name has no spaces) and run with /bin/sh.
-function B.run(cmd)
-  local r
+-- The command writes into a temporary file, never into ExecProcess's pipe:
+-- REAPER reads the pipe only after the command has ended, so a command that
+-- printed more than the pipe holds (64 KB on macOS, a folder of about 500
+-- files) stood still until the timeout, and on macOS lost its last lines.
+-- Measured on both systems: ten seconds for a folder of 700 files. On mac and
+-- linux the file is Lua's temporary name; on Windows it is made in REAPER's
+-- resource folder, which Lua can always open (os.tmpname gives an unwritable
+-- name there, and %TEMP% may hold characters io.open cannot take).
+local win_tmp = 0   -- numbers the temporary names made on Windows
+local function posix_quote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function write_script(cmd, out, last)
+  local tmp = os.tmpname()
+  local f = io.open(tmp, "wb")
+  if not f then os.remove(tmp); return nil end
+  f:write("exec >", posix_quote(out), " 2>/dev/null\n", cmd, "\n", last or "")
+  f:close()
+  return tmp
+end
+
+function B.run(cmd, ps)
+  local r, out
+  if ps and B.os() == "win" then
+    local answer = B.ask_helper(ps)
+    if answer then return answer end
+  end
   if B.os() == "win" then
-    r = reaper.ExecProcess('cmd.exe /S /C "' .. cmd .. '"', EXEC_TIMEOUT_MS)
+    win_tmp = win_tmp + 1
+    out = ("%s\\blv-realobby-%d-%d-%d.tmp"):format(res_path(), os.time(), math.random(1, 999999), win_tmp)
+    r = reaper.ExecProcess('cmd.exe /S /C "( ' .. cmd .. ' ) > "' .. out .. '""', EXEC_TIMEOUT_MS)
   else
-    local tmp = os.tmpname()
-    local f = io.open(tmp, "wb")
-    if not f then os.remove(tmp); return "could not write a temporary command file" end
-    f:write(cmd, "\n")
-    f:close()
+    out = os.tmpname()
+    local tmp = write_script(cmd, out)
+    if not tmp then os.remove(out); return "could not write a temporary command file", false end
     r = reaper.ExecProcess("/bin/sh " .. tmp, EXEC_TIMEOUT_MS)
     os.remove(tmp)
   end
-  if r == nil then return "command could not be started" end
+  local text = out and (read_file(out) or "") or nil
+  if out then os.remove(out) end
+  if r == nil then return "command could not be started", false end
   local code, output = r:match("^(%-?%d+)\r?\n(.*)$")
   if not code then code, output = r:match("^(%-?%d+)$"), "" end
   code = tonumber(code)
-  if code == nil then return r end
+  if code == nil then return text or r end
   if code < 0 then
-    return code == -3 and "command timed out" or ("command did not finish (" .. code .. ")")
+    return code == -3 and "command timed out" or ("command did not finish (" .. code .. ")"), false
   end
-  return output
+  return text and (text .. output) or output
+end
+
+-- The helper (mac and linux): one small /bin/sh that stays in the background
+-- while the window is open and runs the command files whose names it reads
+-- from a named pipe, each in the background. Handing it a command costs a
+-- line written to the pipe; starting a program from REAPER itself, even
+-- "without waiting", holds REAPER up for 15 to 80 ms each time (measured).
+-- The helper ends by itself when the pipe is closed: B.stop_helper, the
+-- script ending, or REAPER quitting.
+B.HELPER_WAIT = 5   -- seconds to wait for the helper's pipe before doing without it
+local helper = {}   -- state: nil (not started), "starting", "ready", "off"
+
+local function helper_ready()
+  if helper.state == "ready" then return true end
+  if helper.state == "off" then return false end
+  local now = reaper.time_precise()
+  if not helper.state then
+    local name = os.tmpname()
+    os.remove(name)
+    helper.pipe = name .. ".pipe"
+    local q = posix_quote(helper.pipe)
+    local tmp = os.tmpname()
+    local f = io.open(tmp, "wb")
+    if not f then os.remove(tmp); helper.state = "off"; return false end
+    f:write("exec >/dev/null 2>&1\n",
+      "mkfifo ", q, " || exit 1\n",
+      "while read -r req; do\n  /bin/sh \"$req\" </dev/null &\ndone < ", q, "\n",
+      "rm -f ", q, " ", posix_quote(tmp), "\n")
+    f:close()
+    reaper.ExecProcess("/bin/sh " .. tmp, -1)
+    helper.state, helper.since = "starting", now
+  end
+  -- Read-write, so opening never waits for the helper and a write never
+  -- fails for want of a reader. The file exists only once it is the pipe.
+  local f = io.open(helper.pipe, "r+")
+  if f then
+    f:setvbuf("no")
+    helper.f, helper.state = f, "ready"
+    return true
+  end
+  if now - helper.since > B.HELPER_WAIT then helper.state = "off" end
+  return false
+end
+
+-- Ends the helper (mac and linux: closes its pipe; Windows: leaves it a
+-- "quit" file). The next B.start begins a new one.
+function B.stop_helper()
+  if helper.f then pcall(helper.f.close, helper.f) end
+  if helper.dir and helper.state == "ready" then write_file(helper.dir .. "\\quit", "") end
+  helper = {}
+end
+
+-- Hands a command file to the helper, or, when there is none, starts it
+-- from REAPER. False while the helper is still starting.
+local function hand_over(tmp)
+  if helper_ready() then
+    if helper.f:write(tmp, "\n") then return true end
+    B.stop_helper()
+    return false
+  end
+  if helper.state == "off" then
+    reaper.ExecProcess("/bin/sh " .. tmp, -1)
+    return true
+  end
+  return false
+end
+
+-- The Windows helper: one hidden PowerShell that stays in the background
+-- while the window is open. It takes requests as files in its own folder
+-- (in REAPER's resource folder) and writes each answer beside it. A folder
+-- listing is PowerShell already, so the helper runs it in place: no new
+-- PowerShell per folder (a quarter of a second each, waited for, before).
+-- It ends when the folder gets a file named "quit" (B.stop_helper) or when
+-- ReaLobby has not marked the folder for B.WIN_HELPER_IDLE seconds (B.tick,
+-- once a frame), and removes its folder as it goes.
+-- PowerShell takes a second or more to start (longer the first time after
+-- Windows boots), so the entry script starts the helper at once (B.warm).
+-- Jobs wait for it for B.WIN_PATIENCE seconds; if it has not answered by
+-- then they are run the waiting way, one at a time with B.WIN_GAP seconds
+-- between them so the window can draw, until it does.
+B.WIN_HELPER_IDLE = 20
+B.WIN_HELPER_WAIT = 60   -- seconds to wait for the helper before doing without it
+B.WIN_PATIENCE = 5
+B.WIN_GAP = 0.05
+local WIN_HELPER = [[
+param([string]$Dir)
+# Not REAPER's folder, so nothing there stays in use while this runs.
+[Environment]::CurrentDirectory = $env:SystemRoot
+Set-Location -LiteralPath $env:SystemRoot
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+$alive = Join-Path $Dir 'alive'
+[IO.File]::WriteAllText($alive, '')
+while ($true) {
+  if (Test-Path -LiteralPath (Join-Path $Dir 'quit')) { break }
+  $mark = Get-Item -LiteralPath $alive -ErrorAction SilentlyContinue
+  if (-not $mark -or ((Get-Date) - $mark.LastWriteTime).TotalSeconds -gt IDLE) { break }
+  $reqs = @(Get-ChildItem -LiteralPath $Dir -Filter *.req | Sort-Object Name)
+  foreach ($r in $reqs) {
+    $out = ''
+    try {
+      $text = [IO.File]::ReadAllText($r.FullName, $utf8)
+      $cut = $text.IndexOf("`n")
+      $kind = $text.Substring(0, $cut).Trim()
+      $body = $text.Substring($cut + 1)
+      if ($kind -eq 'ps') {
+        $out = (@(& ([scriptblock]::Create($body)) 2>$null) -join "`n")
+      } else {
+        Start-Process -FilePath cmd.exe -ArgumentList ('/S /C "' + $body + '"') -WindowStyle Hidden
+      }
+    } catch { $out = "$_" }
+    $base = $r.FullName.Substring(0, $r.FullName.Length - 4)
+    [IO.File]::WriteAllText($base + '.part', $out, $utf8)
+    Move-Item -LiteralPath ($base + '.part') ($base + '.done') -Force
+    Remove-Item -LiteralPath $r.FullName -Force
+  }
+  if ($reqs.Count -eq 0) { Start-Sleep -Milliseconds 15 }
+}
+Remove-Item -LiteralPath $Dir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+]]
+
+local function win_helper_ready()
+  if helper.state == "off" then return false end
+  local now = reaper.time_precise()
+  if not helper.state then
+    win_tmp = win_tmp + 1
+    helper.dir = ("%s\\blv-realobby-helper-%d-%d-%d"):format(res_path(), os.time(), math.random(1, 999999), win_tmp)
+    helper.script = helper.dir .. ".ps1"
+    if not write_file(helper.script, (WIN_HELPER:gsub("IDLE", tostring(B.WIN_HELPER_IDLE)))) then
+      helper.state = "off"
+      return false
+    end
+    -- Timeout -2: REAPER does not wait and starts it minimised (PowerShell
+    -- then hides its own window). A waited ExecProcess would wait for the
+    -- helper itself to end, even behind "cmd /C start" (measured: 21 s).
+    reaper.ExecProcess('powershell -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'
+      .. helper.script .. '" "' .. helper.dir .. '"', -2)
+    helper.state, helper.since, helper.n = "starting", reaper.time_precise(), 0
+    helper.launch = helper.since - now
+  end
+  if helper.state == "starting" then
+    -- Its folder holds "alive" once it runs.
+    if read_file(helper.dir .. "\\alive") then
+      helper.state, helper.marked = "ready", now
+      helper.took = now - helper.since
+      return true
+    end
+    -- The helper removes its own files when it ends, even if it starts late.
+    if now - helper.since > B.WIN_HELPER_WAIT then helper.state = "off" end
+    return false
+  end
+  return true
+end
+
+-- Hands a request ("ps" or "cmd", then the text) to the Windows helper as a
+-- file; returns the path its answer will have, or nil while the helper is
+-- starting (or gone: the next call starts a new one).
+local function win_hand_over(kind, text)
+  if not win_helper_ready() then return nil end
+  helper.n = helper.n + 1
+  local base = ("%s\\%08d"):format(helper.dir, helper.n)
+  -- Written under another name first: the helper only ever sees whole requests.
+  if not write_file(base .. ".new", kind .. "\n" .. text) or not os.rename(base .. ".new", base .. ".req") then
+    os.remove(base .. ".new")
+    helper = {}   -- its folder is gone, so the helper has ended
+    return nil
+  end
+  return base .. ".done"
+end
+
+-- For the checks: "starting", "ready", "off" or nil, and the helper's folder or pipe.
+function B.helper_state() return helper.state, helper.dir or helper.pipe, helper.launch, helper.took end
+
+-- Runs a PowerShell script in the Windows helper and waits for its answer
+-- (the same wait as B.run, without the second it takes to start PowerShell).
+-- Nil when the helper is not up, or did not answer: the caller then runs the
+-- command itself. An error comes back as its message.
+function B.ask_helper(ps)
+  if helper.state ~= "ready" then return nil end
+  local done = win_hand_over("ps", ps)
+  if not done then return nil end
+  local started = reaper.time_precise()
+  while reaper.time_precise() - started < EXEC_TIMEOUT_MS / 1000 do
+    local out = read_file(done)
+    if out then
+      os.remove(done)
+      return out
+    end
+  end
+  return nil
+end
+
+-- Once a frame: tells the Windows helper that ReaLobby is still there.
+function B.tick()
+  if helper.state ~= "ready" or not helper.dir then return end
+  local now = reaper.time_precise()
+  if now - helper.marked < 2 then return end
+  helper.marked = now
+  -- New text each time, so the file's time is sure to change.
+  if not write_file(helper.dir .. "\\alive", tostring(now)) then helper = {} end
+end
+
+local function win_start(cmd, ps)
+  local kind, text = ps and "ps" or "cmd", ps or cmd
+  local done = win_hand_over(kind, text)
+  local started, result = reaper.time_precise(), nil
+  local job = {}
+  function job.poll()
+    if result ~= nil then return result end
+    if not done then
+      done = win_hand_over(kind, text)
+      if not done then
+        -- No helper (yet): the waiting way, one command at a time, with a
+        -- gap after each so a frame can draw in between.
+        local now = reaper.time_precise()
+        if helper.state == "starting" and now - helper.since < B.WIN_PATIENCE then return nil end
+        if now - (helper.waited or -1) < B.WIN_GAP then return nil end
+        local out, ok = B.run(cmd)
+        helper.waited = reaper.time_precise()
+        result = ok ~= false and out or false
+        return result
+      end
+      -- The wait for an answer begins when the request is handed over.
+      started = reaper.time_precise()
+    end
+    local out = read_file(done)
+    if out then
+      result = out
+      os.remove(done)
+    elseif reaper.time_precise() - started > B.JOB_TIMEOUT then
+      result = false
+      B.stop_helper()
+    end
+    return result
+  end
+  return job
+end
+
+-- Starts cmd without waiting for it. Returns a job: job.poll() gives nil
+-- while the command runs, its output once it has ended, or false when it has
+-- not ended after B.JOB_TIMEOUT seconds (a sleeping or unreachable drive).
+-- The window never waits for a job, so a slow drive cannot hold up a frame.
+-- On Windows ps is the PowerShell script inside cmd, when it is one.
+B.JOB_TIMEOUT = 10
+local unread = {}   -- jobs whose result nobody has taken yet
+-- Takes in the result of every job nobody asked about again (a selection
+-- that moved on, a file-manager command), so its temporary files go.
+function B.sweep()
+  local i = 1
+  while i <= #unread do
+    if unread[i].poll() ~= nil then table.remove(unread, i) else i = i + 1 end
+  end
+end
+
+function B.start(cmd, ps)
+  B.sweep()
+  if B.os() == "win" then
+    local job = win_start(cmd, ps)
+    unread[#unread + 1] = job
+    return job
+  end
+  local out = os.tmpname()
+  local done = out .. ".done"
+  -- The output appears under its final name only once it is complete.
+  local tmp = write_script(cmd, out, "mv -f " .. posix_quote(out) .. " " .. posix_quote(done) .. "\n")
+  if not tmp then os.remove(out); return nil end
+  local sent = hand_over(tmp)
+  local started, result = reaper.time_precise(), nil
+  local job = {}
+  function job.poll()
+    if result ~= nil then return result end
+    if not sent then
+      sent = hand_over(tmp)
+      if not sent then return nil end
+    end
+    local text = read_file(done)
+    if text then
+      result = text
+      os.remove(done)
+      os.remove(tmp)
+    elseif reaper.time_precise() - started > B.JOB_TIMEOUT then
+      result = false
+      os.remove(tmp)
+      os.remove(out)
+      os.remove(done)
+      -- In case it was the helper that stopped answering: a fresh one next time.
+      B.stop_helper()
+    end
+    return result
+  end
+  unread[#unread + 1] = job
+  return job
 end
 
 local P_cache
 function B.platform()
-  P_cache = P_cache or platform.new(B.os(), B.run)
+  P_cache = P_cache or platform.new(B.os(), B.run, B.start)
   return P_cache
 end
 
@@ -127,21 +449,30 @@ end
 -- the plug-in file name for VST/VST3 (ident is a full path, maybe with
 -- "<id" after it), the "Maker: Name" ident for AU, the id for CLAP.
 function B.installed_fx()
+  return B.installed_fx_scan()(math.huge)
+end
+
+-- The same list read a little per frame: the function returned takes a time
+-- budget in seconds and gives nil until the list is complete, then the set.
+function B.installed_fx_scan()
   local set, i = {}, 0
-  while true do
-    local ok, _, ident = reaper.EnumInstalledFX(i)
-    if not ok then break end
-    if ident and ident ~= "" then
-      set[ident] = true
-      local file, id = ident:match("^(.-)<(.*)$")
-      file = file or ident
-      local base = file:match("([^/\\]+)$")
-      if base and base ~= "" then set[base] = true end
-      if id and id ~= "" then set[id] = true end
+  return function(budget)
+    local started = reaper.time_precise()
+    while true do
+      local ok, _, ident = reaper.EnumInstalledFX(i)
+      if not ok then return set end
+      if ident and ident ~= "" then
+        set[ident] = true
+        local file, id = ident:match("^(.-)<(.*)$")
+        file = file or ident
+        local base = file:match("([^/\\]+)$")
+        if base and base ~= "" then set[base] = true end
+        if id and id ~= "" then set[id] = true end
+      end
+      i = i + 1
+      if reaper.time_precise() - started >= budget then return nil end
     end
-    i = i + 1
   end
-  return set
 end
 
 -- Every project open in a REAPER tab, keyed by B.normalize(path).
@@ -433,13 +764,35 @@ function B.ini_text()
   return read_file(reaper.get_ini_file())
 end
 
--- Windows drive letters ("C:", ...); not checked on Windows yet.
+-- Windows drive letters ("C:", ...), asked for in the background: returns
+-- the list and whether a fresh one is still on its way (call again, each
+-- frame, until it is not). Starting PowerShell for it the waiting way held
+-- the Settings window up for a second.
+local drives_job, drives_last = nil, {}
 function B.drives()
-  if B.os() ~= "win" then return {} end
-  local out = {}
-  local text = B.run('powershell -NoProfile -Command "[System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name }"') or ""
-  for d in text:gmatch("(%a:)\\") do out[#out + 1] = d end
-  return out
+  if B.os() ~= "win" then return {}, false end
+  local ps = "[System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name }"
+  drives_job = drives_job or B.start('powershell -NoProfile -Command "' .. ps .. '"', ps)
+  local text = drives_job.poll()
+  if text == nil then return drives_last, true end
+  drives_job = nil
+  if text then
+    drives_last = {}
+    for d in text:gmatch("(%a:)\\") do drives_last[#drives_last + 1] = d end
+  end
+  return drives_last, false
+end
+
+-- Makes a folder and its parents with REAPER's own call (no shell).
+function B.make_dir(path)
+  reaper.RecursiveCreateDirectory(path, 0)
+  return true
+end
+
+-- Starts the background helper ahead of the first listing (on Windows
+-- PowerShell needs a second or more to come up).
+function B.warm()
+  if B.os() == "win" then win_helper_ready() else helper_ready() end
 end
 
 -- Action list ---------------------------------------------------------------

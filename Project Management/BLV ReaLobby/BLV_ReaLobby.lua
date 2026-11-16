@@ -1,6 +1,6 @@
 -- @description BLV ReaLobby
 -- @author BLV
--- @version 0.1.3
+-- @version 0.1.4
 -- @about A project launcher for REAPER. Requires REAPER 7.74 or newer and ReaImGui. macOS and Windows.
 --   Copyright (c) 2026 BLV. All rights reserved. Free to use. You may not copy, modify, repackage or redistribute this software.
 -- @provides
@@ -19,6 +19,7 @@ package.path = here .. "/?.lua;" .. package.path
 
 local IMGUI_API = "0.10"   -- ReaImGui 0.10.x (checked against 0.10.0.5)
 local SAVE_EVERY = 1.0     -- seconds between saves while settings change
+local FX_SCAN_BUDGET = 0.004   -- seconds per frame spent reading REAPER's plug-in list
 
 local function fail(msg)
   reaper.MB(msg, "BLV ReaLobby", 0)
@@ -66,6 +67,27 @@ end
 -- One window per REAPER: a second start brings the running one forward.
 local instance = require("realobby.instance")
 local B = require("realobby.bridge")
+-- The background helper that lists folders starts now, so it is up by the
+-- time the window asks for the first folder.
+pcall(B.warm)
+
+-- The debug timer (realobby/perf.lua): off unless a file named
+-- "debug-timer.txt" is in ReaLobby's data folder. It then writes every frame
+-- of 50 ms or longer, with what ran in it, to "debug-timer.log" beside it.
+local perf = require("realobby.perf")
+do
+  local dir = reaper.GetResourcePath() .. "/Data/BLV ReaLobby/"
+  local flag = io.open(dir .. "debug-timer.txt", "rb")
+  if flag then
+    flag:close()
+    perf.start({ clock = reaper.time_precise, write = function(line)
+      local f = io.open(dir .. "debug-timer.log", "ab")
+      if f then f:write(os.date("%H:%M:%S "), line, "\n"); f:close() end
+    end })
+    perf.frame_begin()   -- frame 1 is the start: loading the modules and the saved data
+    perf.wrap(B, "run", function(args) return "shell: " .. tostring(args[1]):sub(1, 200) end)
+  end
+end
 local single = instance.new({ get = reaper.GetExtState, set = reaper.SetExtState, now = reaper.time_precise })
 -- Run again from the action list while this window is open (it was started
 -- as that action): REAPER closes it and starts it afresh, centred, instead of
@@ -94,6 +116,73 @@ local online = require("realobby.online")
 local timelog = require("realobby.timelog")
 
 local P = B.platform()
+
+-- What the debug timer names in a slow frame.
+local folders = require("realobby.ui.folders")
+local function perf_hooks()
+  local function tail(path) return tostring(path):match("[^/\\]*$") end
+  local function listing(name)
+    return function(args, res) return name .. " " .. tostring(args[1]) .. " (" .. #(res[1] or {}) .. " entries)" end
+  end
+  perf.wrap(P, "list_dir", listing("list_dir"))
+  perf.wrap(P, "list_tree", listing("list_tree"))
+  perf.wrap(P, "list_dir_start", function(args) return "start listing " .. tostring(args[1]) end)
+  perf.wrap(P, "list_tree_start", function(args) return "start listing tree " .. tostring(args[1]) end)
+  for _, name in ipairs({ "reveal", "open_folder", "mkdir", "trash", "trash_many", "copy", "move" }) do
+    perf.wrap(P, name, function(args) return "P." .. name .. " " .. tostring(type(args[1]) == "table" and #args[1] or args[1]) end)
+  end
+  perf.wrap(rpp, "read", function(args) return "rpp.read " .. tail(args[1]) end)
+  perf.wrap(rpp, "read_fx_chains", function(args) return "rpp.read_fx_chains " .. tail(args[1]) end)
+  perf.wrap(store, "save", function(args) return "store.save " .. tail(args[1]) end)
+  perf.wrap(store, "load", "store.load")
+  perf.wrap(store, "read", "store.read")
+  perf.wrap(timelog, "load", "timelog.load")
+  for _, name in ipairs({ "open", "drives", "templates", "recent", "ini_text", "open_projects",
+    "startup_installed", "start_timer", "ensure_action", "new_from_template", "new_empty" }) do
+    perf.wrap(B, name, "B." .. name)
+  end
+  local bounces, backups, cleanup = require("realobby.bounces"), require("realobby.backups"), require("realobby.cleanup")
+  perf.wrap(bounces, "list", "bounces.list")
+  perf.wrap(backups, "list", "backups.list")
+  perf.wrap(cleanup, "scan", "cleanup.scan")
+  perf.wrap(cleanup, "apply", "cleanup.apply")
+  perf.wrap(cleanup, "b64decode", function(args) return "base64 decode (" .. #args[1] .. " bytes)" end)
+  perf.wrap(details, "lists", "details.lists")
+  perf.wrap(details, "draw", "details.draw")
+  perf.wrap(dialogs, "draw", "dialogs.draw")
+  perf.wrap(dialogs, "row_menu", "dialogs.row_menu")
+  perf.wrap(sidebar, "draw", "sidebar.draw")
+  perf.wrap(table_ui, "draw", "table.draw")
+  perf.wrap(shell, "frame", "shell.frame")
+  perf.wrap(folders, "shortcuts", "folders.shortcuts")
+  local new_nav = folders.new
+  folders.new = function(o)
+    local nav = perf.span("folders.new " .. tostring(o.start), new_nav, o)
+    perf.wrap(nav, "go", function(args) return "browser go " .. tostring(args[2]) end)
+    perf.wrap(nav, "step", "browser count step")
+    return nav
+  end
+  -- The unused-audio check: each file it reads, and its work between pauses.
+  local make_ctx = details.cleanup_ctx
+  details.cleanup_ctx = function(state, yield)
+    local ctx = make_ctx(state, yield)
+    local read = ctx.read
+    ctx.read = function(path)
+      return perf.span(function(text) return "read " .. tail(path) .. " (" .. (text and #text or 0) .. " bytes)" end, read, path)
+    end
+    if yield then
+      local since = reaper.time_precise()
+      ctx.yield = function()
+        perf.note("unused-audio check: work between pauses", reaper.time_precise() - since)
+        yield()
+        since = reaper.time_precise()
+      end
+    end
+    return ctx
+  end
+end
+if perf.enabled then perf_hooks() end
+
 local data_dir = P.join(P.join(reaper.GetResourcePath(), "Data"), "BLV ReaLobby")
 local data_path = P.join(data_dir, "realobby.dat")
 local data = store.load(data_path)
@@ -115,8 +204,13 @@ local cached = store.read(cache_path)
 local L = library.new({ P = P, recent = recent, normalize = B.normalize, data = data, read = rpp.read, budget = 8,
   clock = reaper.time_precise,
   cache = type(cached) == "table" and cached.version == 1 and type(cached.entries) == "table" and cached.entries or nil })
-L:set_installed_fx(B.installed_fx())
+-- REAPER's list of installed plug-ins is read a little per frame (the loop):
+-- until it is complete no plug-in is called missing.
+local fx_scan = B.installed_fx_scan()
 load_time(L)
+if perf.enabled then
+  for _, name in ipairs({ "step", "check_media", "songs", "media_refs", "refresh" }) do perf.wrap(L, name, "library:" .. name) end
+end
 
 local fx_offline_supported = B.fx_offline_supported()
 local sort_column = rows.SORT_COLUMNS[data.sort.column] and data.sort.column or "opened"
@@ -325,7 +419,7 @@ local saver_ = saver.new({
   every = SAVE_EVERY,
   now = reaper.time_precise,
   save = function()
-    if not made_dir then made_dir = P.mkdir(data_dir) ~= false end
+    if not made_dir then made_dir = B.make_dir(data_dir) end
     return store.save(data_path, data)
   end,
   log = function(err)
@@ -373,6 +467,7 @@ local function run_preview()
     state.selected_key = song.key
   end
   if p.dialog == nil or p.dialog == "" then return end
+  if (p.press or "") ~= "" then dialogs.auto_press = p.press end   -- presses that button once
   if p.dialog == "confirm" then
     local titles = { rename = "Rename", move = "Move", archive = "Archive", delete = "Move to Trash" }
     dialogs.confirm(state, song, actions.plan(state.env, p.action, song, p.arg), titles[p.action], p.arg)
@@ -403,6 +498,8 @@ local function close()
     pcall(store.save, cache_path, { version = 1, entries = L:cache_table() })
   end
   single:release()
+  pcall(B.sweep)
+  pcall(B.stop_helper)
 end
 
 local window_open = true
@@ -418,15 +515,24 @@ end
 local timer_checked = false
 
 local function loop()
+  perf.frame_begin()
+  B.tick()
   if not timer_checked then
     -- The time counter runs in the background while REAPER is open.
     timer_checked = true
     if data.count_time ~= false then pcall(B.start_timer, timer_path) end
   end
+  if fx_scan then
+    local set = perf.span("installed plug-ins", fx_scan, FX_SCAN_BUDGET)
+    if set then
+      L:set_installed_fx(set)
+      fx_scan = nil
+    end
+  end
   if window_open then
     state.scanning = not L:step()
     if preview and not state.scanning then run_preview() end
-    frame_rows = current_rows()
+    frame_rows = perf.span("rows", current_rows)
     single:beat()
     if single:focus_requested() then
       state.recenter = true
@@ -448,6 +554,10 @@ local function loop()
     end
   end
   if online_pass then online_step() end
+  if perf.enabled then
+    perf.frame_end(("dialog=%s view=%s query=%q song=%s scanning=%s"):format(tostring(state.dialog),
+      tostring(state.view.group), state.query, tostring(state.selected_key):match("[^/\\]*$"), tostring(state.scanning)))
+  end
   -- The window is gone but FX are still coming online: keep going, silently.
   if window_open or online_pass then reaper.defer(loop) end
 end
@@ -458,4 +568,5 @@ reaper.atexit(function()
   close()
   if online_pass then B.online_progress_set(online.INTERRUPTED) end
 end)
+perf.frame_end("start")
 reaper.defer(loop)

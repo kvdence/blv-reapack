@@ -13,6 +13,12 @@
 -- milliseconds per frame (M.CLEANUP_BUDGET), so the window stays responsive.
 -- The heading and tiles show at once.
 --
+-- Nothing here waits for a folder listing: the lists and the checks run as
+-- coroutines (M.step), and where the platform can list without waiting
+-- (P.list_dir_start) a listing is started and the coroutine rests (yields
+-- M.WAIT) until it is in. A sleeping or unreachable drive then only delays
+-- that song's lists; the window keeps drawing.
+--
 -- Reads from state: library, P, data, backup_dir, fx_offline_supported,
 -- notice, open(song, override, path), use_template(row, kind), view, clock (seconds).
 local theme = require("realobby.ui.theme")
@@ -32,7 +38,42 @@ local GAP = 11
 local menu_rows = {}   -- list id -> { song, path } of the row whose right-click menu is open
 M.SETTLE = 0.15     -- seconds a selection rests before its lists load
 M.CLEANUP_BUDGET = 0.006   -- seconds of the unused-audio check per frame
+M.LISTS_BUDGET = 0.004     -- seconds of sorting the lists per frame (the listings themselves are not waited for)
+M.READ_BLOCK = 1 << 20     -- bytes of a project file read per step of a check
+M.WAIT = {}                -- what a coroutine yields while a folder listing is on its way
 local loaded = {}   -- { key, id, since, ready, bounces, backups } for the selected song
+
+-- Lists dir through P. Inside a coroutine, when P can list without waiting,
+-- the listing is started and the coroutine yields M.WAIT until it is in.
+-- Where P can only list the waiting way (Windows), the coroutine yields
+-- after each listing, so a frame waits for one folder at most.
+local function patient_list(P, dir)
+  if not coroutine.isyieldable() then return P.list_dir(dir) or {} end
+  local job = P.list_dir_start and P.list_dir_start(dir)
+  if not job then
+    local entries = P.list_dir(dir) or {}
+    coroutine.yield(M.WAIT)
+    return entries
+  end
+  while true do
+    local entries = job.poll()
+    if entries then return entries end
+    coroutine.yield(M.WAIT)
+  end
+end
+
+-- Runs co until it ends, rests for a listing, or budget seconds have passed
+-- (clock in seconds). Returns false while it has more to do; once it has
+-- ended: true, true and its results, or true, false and the error.
+function M.step(co, clock, budget)
+  local started = clock()
+  while true do
+    local r = table.pack(coroutine.resume(co))
+    if not r[1] then return true, false, r[2] end
+    if coroutine.status(co) == "dead" then return true, true, table.unpack(r, 2, r.n) end
+    if r[2] == M.WAIT or clock() - started >= budget then return false end
+  end
+end
 
 -- The selected song's bounces and backups. They are listed (and the media
 -- check runs) once the selection has rested for M.SETTLE seconds at clock
@@ -47,28 +88,50 @@ function M.lists(state, song, now)
       checked = loaded.key == song.key and loaded.checked }
   end
   if loaded.ready or now - loaded.since < M.SETTLE then return loaded end
-  local P = M.view_P(state)
-  if not loaded.checked and state.library then state.library:check_media(song.key, P and P.list_dir) end
-  loaded.checked = true
-  if P then
-    local extra = state.data and state.data.bounce_folders or nil
-    loaded.bounces = bounces.list(song.info or {}, song.newest, P, extra)
-    loaded.backups = backups.list(song.newest, P, state.backup_dir)
+  local mine = loaded
+  if not mine.lists_co then
+    mine.lists_co = coroutine.create(function()
+      local P = M.view_P(state)
+      if not mine.checked and state.library then state.library:check_media(song.key, P and P.list_dir) end
+      mine.checked = true
+      if not P then return {}, {} end
+      local extra = state.data and state.data.bounce_folders or nil
+      return bounces.list(song.info or {}, song.newest, P, extra), backups.list(song.newest, P, state.backup_dir)
+    end)
   end
-  loaded.ready = true
+  local done, ok, b, k = M.step(mine.lists_co, state.clock or os.clock, M.LISTS_BUDGET)
+  if done then
+    mine.lists_co = nil
+    mine.checked = true
+    if ok then mine.bounces, mine.backups = b or {}, k or {} end
+    mine.ready = true
+  end
   return loaded
 end
 
 -- The read and folder context the clean-up uses (also for its dialog).
+-- With yield, a project file is read M.READ_BLOCK bytes at a time with a
+-- yield between blocks, and folders are listed without waiting (M.fresh_P).
 function M.cleanup_ctx(state, yield)
   local function read(path)
     local f = io.open(path, "rb")
     if not f then return nil end
-    local text = f:read("a")
+    if not yield then
+      local text = f:read("a")
+      f:close()
+      return text
+    end
+    local parts = {}
+    while true do
+      local block = f:read(M.READ_BLOCK)
+      if not block then break end
+      parts[#parts + 1] = block
+      yield()
+    end
     f:close()
-    return text
+    return table.concat(parts)
   end
-  return { P = state.P, read = read, backup_dir = state.backup_dir,
+  return { P = M.fresh_P(state), read = read, backup_dir = state.backup_dir,
     bounce_folders = state.data and state.data.bounce_folders or nil,
     refs = state.library and state.library.media_refs and state.library:media_refs() or nil, yield = yield }
 end
@@ -91,20 +154,14 @@ local function cleanup_step(state, song, clock)
       return cleanup.scan(song, ctx)
     end)
   end
-  local started = clock()
-  while coroutine.status(loaded.cleanup_co) ~= "dead" do
-    local ok, res, err = coroutine.resume(loaded.cleanup_co)
-    if not ok then
-      loaded.cleanup = { error = tostring(res) }
-      break
-    end
-    if coroutine.status(loaded.cleanup_co) == "dead" then
-      loaded.cleanup = res and { result = res } or { error = err }
-      break
-    end
-    if clock() - started >= M.CLEANUP_BUDGET then break end
+  local done, ok, res, err = M.step(loaded.cleanup_co, clock, M.CLEANUP_BUDGET)
+  if not done then return end
+  loaded.cleanup_co = nil
+  if not ok then
+    loaded.cleanup = { error = tostring(res) }
+  else
+    loaded.cleanup = res and { result = res } or { error = err }
   end
-  if loaded.cleanup then loaded.cleanup_co = nil end
 end
 
 M.MAX_BACKUPS = 8
@@ -154,14 +211,24 @@ function M.view_P(state)
   local clock = state.clock or os.clock
   local V = setmetatable({}, { __index = P })
   function V.list_dir(dir)
-    local now = clock()
     local hit = listings[dir]
-    if hit and now - hit.t < M.LISTING_TTL then return hit.entries end
-    local entries = P.list_dir(dir) or {}
-    listings[dir] = { t = now, entries = entries }
+    if hit and clock() - hit.t < M.LISTING_TTL then return hit.entries end
+    local entries = patient_list(P, dir)
+    -- A listing that did not come in is asked for again next time.
+    if not entries.failed then listings[dir] = { t = clock(), entries = entries } end
     return entries
   end
   return V
+end
+
+-- state.P with nothing remembered (the clean-up dialog always lists afresh);
+-- inside a coroutine its listings do not hold up the frame.
+function M.fresh_P(state)
+  local P = state.P
+  if not P then return nil end
+  local F = setmetatable({}, { __index = P })
+  function F.list_dir(dir) return patient_list(P, dir) end
+  return F
 end
 
 -- Buttons ---------------------------------------------------------------------
